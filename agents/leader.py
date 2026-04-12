@@ -10,20 +10,11 @@ import anthropic
 from agents.researcher import ResearcherAgent, ResearcherError
 from agents.analyst import AnalystAgent, AnalystError
 from agents.writer import WriterAgent, WriterError
+from agents.ibex_data import get_ibex35_components
 
 logger = logging.getLogger("bolsa.leader")
 
 SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
-
-IBEX35_TICKERS_SET = {
-    "ACS.MC", "ACX.MC", "AENA.MC", "AMS.MC", "ANA.MC",
-    "BBVA.MC", "BKT.MC", "CABK.MC", "CLNX.MC", "COL.MC",
-    "ELE.MC", "ENG.MC", "FDR.MC", "FER.MC", "GRF.MC",
-    "IAG.MC", "IBE.MC", "IDR.MC", "INDRA.MC", "INM.MC",
-    "ITX.MC", "LOG.MC", "MAP.MC", "MEL.MC", "MRL.MC",
-    "MTS.MC", "NTGY.MC", "RED.MC", "REE.MC", "REP.MC",
-    "ROVI.MC", "SAB.MC", "SAN.MC", "SGRE.MC", "TEF.MC",
-}
 
 
 class PipelineError(Exception):
@@ -60,10 +51,27 @@ class LeaderAgent:
         start = time.time()
         errors = []
 
+        # Carga de componentes IBEX 35 — primer paso obligatorio antes de todo
+        logger.info("[ 0/3 ] Cargando composición actual del IBEX 35...")
+        cache_dir = os.path.dirname(self.config.get("data_raw_dir", "data/raw")) or "data"
+        try:
+            components = get_ibex35_components(
+                cache_dir=cache_dir,
+                max_cache_age_days=int(self.config.get("ibex_cache_days", 7)),
+            )
+            logger.info(
+                f"[ 0/3 ] IBEX 35: {len(components['tickers'])} componentes "
+                f"(fuente: {components.get('source')}, fecha: {components.get('last_updated')})"
+            )
+        except Exception as e:
+            result = {"status": "failed", "pdf_path": None, "date": date, "errors": [f"Error cargando IBEX 35: {e}"]}
+            self.log_run_summary(result, elapsed=time.time() - start)
+            return result
+
         pipeline_retries = min(self.max_retries, 3)
         for attempt in range(pipeline_retries):
             try:
-                result = self.execute_pipeline(date, skip_researcher=(attempt > 0))
+                result = self.execute_pipeline(date, components, skip_researcher=(attempt > 0))
                 self.log_run_summary(result, elapsed=time.time() - start)
                 return result
             except PipelineError as e:
@@ -81,17 +89,17 @@ class LeaderAgent:
         self.log_run_summary(result, elapsed=time.time() - start)
         return result
 
-    def execute_pipeline(self, date: str, skip_researcher: bool = False) -> dict:
+    def execute_pipeline(self, date: str, components: dict, skip_researcher: bool = False) -> dict:
         # Fase 1: Researcher
         if not skip_researcher:
             logger.info("[ 1/3 ] Ejecutando Researcher...")
-            researcher = ResearcherAgent(date, self.config)
+            researcher = ResearcherAgent(date, self.config, components=components)
             r_result = researcher.run()
             if r_result["status"] == "error":
                 raise PipelineError(f"Researcher falló: {r_result['errors']}")
             logger.info(f"[ 1/3 ] Researcher completado ({r_result['status']})")
         else:
-            logger.info("[ 1/3 ] Researcher omitido (reintento)")
+            logger.info("[ 1/3 ] Researcher omitido (datos ya existentes)")
 
         # Fase 2: Analyst
         logger.info("[ 2/3 ] Ejecutando Analyst...")

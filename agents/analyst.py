@@ -103,7 +103,7 @@ class AnalystAgent:
                 prompt = self.build_prompt(data, correction_feedback=last_error if attempt > 0 else "")
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=4096,
+                    max_tokens=8192,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )

@@ -66,6 +66,7 @@ def main():
         sys.exit(0)
 
     from agents.leader import LeaderAgent
+    from agents.ibex_data import get_ibex35_components
 
     config = {
         "api_key": os.environ["ANTHROPIC_API_KEY"],
@@ -82,6 +83,21 @@ def main():
         "rss_expansion": os.getenv("RSS_EXPANSION", "https://www.expansion.com/rss/mercados.xml"),
         "rss_cinco_dias": os.getenv("RSS_CINCO_DIAS", "https://cincodias.elpais.com/seccion/rss/mercados/"),
     }
+
+    # Verificación temprana: obtener composición del IBEX antes de arrancar el pipeline
+    logger.info("Verificando composición actual del IBEX 35...")
+    try:
+        components = get_ibex35_components(
+            cache_dir=os.path.dirname(config["data_raw_dir"]) or "data",
+            max_cache_age_days=config["ibex_cache_days"],
+        )
+        logger.info(
+            f"IBEX 35 listo: {len(components['tickers'])} componentes "
+            f"(fuente: {components.get('source')}, fecha: {components.get('last_updated')})"
+        )
+    except Exception as e:
+        logger.error(f"No se pudo obtener la composición del IBEX 35: {e}. Abortando.")
+        sys.exit(1)
 
     leader = LeaderAgent(config, logger)
     result = leader.run()
