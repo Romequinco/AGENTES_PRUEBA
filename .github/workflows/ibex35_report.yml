@@ -1,0 +1,55 @@
+name: IBEX 35 — Informe Diario
+
+on:
+  schedule:
+    # 16:00 UTC = 18:00 Madrid (verano UTC+2) / 17:00 Madrid (invierno UTC+1)
+    # El script detecta internamente si son >=17:35 Madrid y sale sin error si no
+    - cron: '0 16 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Forzar ejecución ignorando horario'
+        required: false
+        default: 'false'
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Generar informe IBEX 35
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
+        run: python main.py
+
+      - name: Subir informe PDF
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-ibex35-${{ github.run_id }}
+          path: output/informe_*.pdf
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Subir logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-ibex35-${{ github.run_id }}
+          path: logs/run_*.log
+          retention-days: 7
+          if-no-files-found: ignore

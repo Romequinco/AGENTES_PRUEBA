@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/Usuario/Downloads/AGENTES_PRUEBA -type f \\\\\\( -name \"*.py\" -o -name \"*.md\" -o -name \"*.txt\" \\\\\\) ! -path \"*/.git/*\" -exec wc -l {} +)",
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile agents/leader.py agents/writer.py agents/analyst.py agents/researcher.py main.py)",
+      "Bash(python -m py_compile agents/researcher.py agents/analyst.py agents/writer.py agents/leader.py main.py)",
+      "Bash(python -c ':*)"
+    ]
+  }
+}
