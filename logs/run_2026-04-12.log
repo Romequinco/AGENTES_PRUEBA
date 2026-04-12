@@ -1,0 +1,82 @@
+2026-04-12 17:57:16,264 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-12 17:57:20,523 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-12 ===
+2026-04-12 17:57:20,523 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-12 17:57:20,523 [INFO] bolsa.researcher: Descargando precios IBEX 35 para 2026-04-12
+2026-04-12 17:57:42,310 [INFO] bolsa.researcher: Tickers con datos válidos: 31/35
+2026-04-12 17:57:42,314 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-12.csv
+2026-04-12 17:57:42,315 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-12 17:57:42,576 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 46 noticias
+2026-04-12 17:57:53,349 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-12 17:57:53,351 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-12.json (46 items)
+2026-04-12 17:57:53,351 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-12 17:57:53,351 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 17:57:54,165 [WARNING] bolsa.analyst: Analyst intento 1: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9oLsKdDCKoGP26ZcDH'}
+2026-04-12 17:57:59,440 [WARNING] bolsa.analyst: Analyst intento 2: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9ojGTpXshHJji2gwuy'}
+2026-04-12 17:58:04,715 [WARNING] bolsa.analyst: Analyst intento 3: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9p7tFWaniWABeXXZ6c'}
+2026-04-12 17:58:04,715 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9p7tFWaniWABeXXZ6c'}
+2026-04-12 17:58:04,716 [ERROR] bolsa.leader: Pipeline intento 1 fallido: Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9p7tFWaniWABeXXZ6c'}"]
+2026-04-12 17:58:04,716 [INFO] bolsa.leader: Reintentando en 5s...
+2026-04-12 17:58:09,716 [INFO] bolsa.leader: [ 1/3 ] Researcher omitido (reintento)
+2026-04-12 17:58:09,716 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 17:58:10,407 [WARNING] bolsa.analyst: Analyst intento 1: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9pYFD36e9drrduLs2B'}
+2026-04-12 17:58:15,700 [WARNING] bolsa.analyst: Analyst intento 2: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9pvqWdAJD6ZFBLpcGo'}
+2026-04-12 17:58:21,274 [WARNING] bolsa.analyst: Analyst intento 3: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9qKRK6av3fmFXnQkBB'}
+2026-04-12 17:58:21,275 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9qKRK6av3fmFXnQkBB'}
+2026-04-12 17:58:21,275 [ERROR] bolsa.leader: Pipeline intento 2 fallido: Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9qKRK6av3fmFXnQkBB'}"]
+2026-04-12 17:58:21,275 [INFO] bolsa.leader: Reintentando en 5s...
+2026-04-12 17:58:26,276 [INFO] bolsa.leader: [ 1/3 ] Researcher omitido (reintento)
+2026-04-12 17:58:26,276 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 17:58:27,027 [WARNING] bolsa.analyst: Analyst intento 1: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9qmHJsNN8GPHbdjt28'}
+2026-04-12 17:58:32,284 [WARNING] bolsa.analyst: Analyst intento 2: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9r9nQZ2WQfYf9381Ni'}
+2026-04-12 17:58:37,558 [WARNING] bolsa.analyst: Analyst intento 3: API error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9rYHzRniCbuU34euno'}
+2026-04-12 17:58:37,559 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9rYHzRniCbuU34euno'}
+2026-04-12 17:58:37,559 [ERROR] bolsa.leader: Pipeline intento 3 fallido: Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZz9rYHzRniCbuU34euno'}"]
+2026-04-12 17:58:37,559 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    FAILED
+  Fecha:     2026-04-12
+  PDF:       None
+  QA Score:  —/100
+  Tiempo:    77s
+  Errores:   ['Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9p7tFWaniWABeXXZ6c\'}"]', 'Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9qKRK6av3fmFXnQkBB\'}"]', 'Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9rYHzRniCbuU34euno\'}"]']
+2026-04-12 17:58:37,560 [ERROR] bolsa: Pipeline fallido: ['Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9p7tFWaniWABeXXZ6c\'}"]', 'Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9qKRK6av3fmFXnQkBB\'}"]', 'Analyst falló: ["Analyst agotó 3 intentos. Último error: Error code: 401 - {\'type\': \'error\', \'error\': {\'type\': \'authentication_error\', \'message\': \'invalid x-api-key\'}, \'request_id\': \'req_011CZz9rYHzRniCbuU34euno\'}"]']
+2026-04-12 17:59:29,910 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-12 17:59:32,063 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-12 ===
+2026-04-12 17:59:32,063 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-12 17:59:32,063 [INFO] bolsa.researcher: Descargando precios IBEX 35 para 2026-04-12
+2026-04-12 17:59:48,470 [INFO] bolsa.researcher: Tickers con datos válidos: 31/35
+2026-04-12 17:59:48,473 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-12.csv
+2026-04-12 17:59:48,473 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-12 17:59:48,764 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 46 noticias
+2026-04-12 17:59:59,857 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-12 17:59:59,858 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-12.json (46 items)
+2026-04-12 17:59:59,859 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-12 17:59:59,859 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 18:00:38,738 [WARNING] bolsa.analyst: Analyst intento 1: JSON inválido, reintentando...
+2026-04-12 18:01:21,717 [WARNING] bolsa.analyst: Analyst intento 2: JSON inválido, reintentando...
+2026-04-12 18:02:01,864 [WARNING] bolsa.analyst: Analyst intento 3: JSON inválido, reintentando...
+2026-04-12 18:02:01,864 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 171 column 17 (char 12040). Asegúrate de responder solo con JSON válido.
+2026-04-12 18:02:01,864 [ERROR] bolsa.leader: Pipeline intento 1 fallido: Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 171 column 17 (char 12040). Asegúrate de responder solo con JSON válido.']
+2026-04-12 18:02:01,864 [INFO] bolsa.leader: Reintentando en 5s...
+2026-04-12 18:02:06,865 [INFO] bolsa.leader: [ 1/3 ] Researcher omitido (reintento)
+2026-04-12 18:02:06,865 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 18:02:44,465 [WARNING] bolsa.analyst: Analyst intento 1: JSON inválido, reintentando...
+2026-04-12 18:03:24,438 [WARNING] bolsa.analyst: Analyst intento 2: JSON inválido, reintentando...
+2026-04-12 18:04:04,258 [WARNING] bolsa.analyst: Analyst intento 3: JSON inválido, reintentando...
+2026-04-12 18:04:04,258 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Expecting property name enclosed in double quotes: line 245 column 24 (char 11775). Asegúrate de responder solo con JSON válido.
+2026-04-12 18:04:04,258 [ERROR] bolsa.leader: Pipeline intento 2 fallido: Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Expecting property name enclosed in double quotes: line 245 column 24 (char 11775). Asegúrate de responder solo con JSON válido.']
+2026-04-12 18:04:04,259 [INFO] bolsa.leader: Reintentando en 5s...
+2026-04-12 18:04:09,259 [INFO] bolsa.leader: [ 1/3 ] Researcher omitido (reintento)
+2026-04-12 18:04:09,260 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-12 18:04:46,821 [WARNING] bolsa.analyst: Analyst intento 1: JSON inválido, reintentando...
+2026-04-12 18:05:29,488 [WARNING] bolsa.analyst: Analyst intento 2: JSON inválido, reintentando...
+2026-04-12 18:06:09,779 [WARNING] bolsa.analyst: Analyst intento 3: JSON inválido, reintentando...
+2026-04-12 18:06:09,779 [ERROR] bolsa.analyst: Analyst fallido: Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 179 column 18 (char 11570). Asegúrate de responder solo con JSON válido.
+2026-04-12 18:06:09,780 [ERROR] bolsa.leader: Pipeline intento 3 fallido: Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 179 column 18 (char 11570). Asegúrate de responder solo con JSON válido.']
+2026-04-12 18:06:09,780 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    FAILED
+  Fecha:     2026-04-12
+  PDF:       None
+  QA Score:  —/100
+  Tiempo:    398s
+  Errores:   ["Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 171 column 17 (char 12040). Asegúrate de responder solo con JSON válido.']", "Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Expecting property name enclosed in double quotes: line 245 column 24 (char 11775). Asegúrate de responder solo con JSON válido.']", "Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 179 column 18 (char 11570). Asegúrate de responder solo con JSON válido.']"]
+2026-04-12 18:06:09,780 [ERROR] bolsa: Pipeline fallido: ["Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 171 column 17 (char 12040). Asegúrate de responder solo con JSON válido.']", "Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Expecting property name enclosed in double quotes: line 245 column 24 (char 11775). Asegúrate de responder solo con JSON válido.']", "Analyst falló: ['Analyst agotó 3 intentos. Último error: JSON inválido en intento 3: Unterminated string starting at: line 179 column 18 (char 11570). Asegúrate de responder solo con JSON válido.']"]

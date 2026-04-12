@@ -78,6 +78,7 @@ def main():
         "data_analysis_dir": os.getenv("DATA_ANALYSIS_DIR", "data/analysis"),
         "output_dir": os.getenv("OUTPUT_DIR", "output"),
         "logs_dir": os.getenv("LOGS_DIR", "logs"),
+        "ibex_cache_days": int(os.getenv("IBEX_CACHE_DAYS", "7")),
         "rss_expansion": os.getenv("RSS_EXPANSION", "https://www.expansion.com/rss/mercados.xml"),
         "rss_cinco_dias": os.getenv("RSS_CINCO_DIAS", "https://cincodias.elpais.com/seccion/rss/mercados/"),
     }
