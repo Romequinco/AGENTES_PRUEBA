@@ -29,6 +29,18 @@ logger = logging.getLogger("bolsa.writer")
 
 SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
 
+
+def _strip_markdown_fence(text: str) -> str:
+    """Extrae el contenido de un bloque ```json ... ``` o ``` ... ```."""
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = lines[1:]  # quitar línea de apertura (```json o ```)
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return text
+
 COLORS = {
     "primary": "#003366",
     "secondary": "#0066CC",
@@ -133,12 +145,12 @@ class WriterAgent:
             try:
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=2048,
+                    max_tokens=4096,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw = response.content[0].text.strip()
-                raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                raw = _strip_markdown_fence(raw)
                 return json.loads(raw)
             except json.JSONDecodeError as e:
                 last_error = str(e)
@@ -152,11 +164,15 @@ class WriterAgent:
         logger.warning("Writer: usando texto genérico de respaldo")
         return {
             "titulo_informe": f"IBEX 35 — Informe Diario — {self.date}",
+            "titular_portada": f"IBEX 35 — Informe Diario — {self.date}",
+            "titulares_candidatos": [],
             "resumen_ejecutivo": "Informe generado automáticamente. Consulte los datos adjuntos.",
             "narrativa_mercado": "Datos de mercado disponibles en la tabla adjunta.",
             "narrativa_sectores": "Análisis sectorial disponible en los gráficos adjuntos.",
             "narrativa_noticias": "Noticias del día disponibles en la sección correspondiente.",
             "conclusion": "Consulte los datos y gráficos para una visión completa del mercado.",
+            "puntos_vigilancia": [],
+            "calidad_datos": "limitados",
             "disclaimer": "Este informe ha sido generado de forma automatizada con fines meramente informativos y no constituye asesoramiento financiero ni recomendación de inversión.",
         }
 
@@ -345,7 +361,13 @@ class WriterAgent:
 
         # ── Página 1: Portada ──────────────────────────────────────────────
         story.append(Spacer(1, 2*cm))
-        story.append(Paragraph(text.get("titulo_informe", f"IBEX 35 — Informe Diario — {date_es}"), style_h1))
+        # Usar titular_portada si existe; si no, titulo_informe genérico
+        portada_title = (
+            text.get("titular_portada")
+            or text.get("titulo_informe")
+            or f"IBEX 35 — Informe Diario — {date_es}"
+        )
+        story.append(Paragraph(portada_title, style_h1))
         story.append(Spacer(1, 0.3*cm))
         story.append(HRFlowable(width="100%", thickness=2, color=C_PRIMARY))
         story.append(Spacer(1, 0.5*cm))

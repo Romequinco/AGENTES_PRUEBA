@@ -1,0 +1,15 @@
+{
+  "status": "success",
+  "date": "2026-04-10",
+  "pdf_path": "output\\informe_2026-04-10.pdf",
+  "qa_score": 92,
+  "qa_recommendation": "approved",
+  "qa_issues": [
+    "sector_analysis contiene 17 sectores en lugar de exactamente 6 (duplicaciones y divisiones innecesarias: 'Transporte y Distribución' aparece 2 veces, 'Telecomunicaciones y otros' separado, múltiples sectores con un único ticker)",
+    "technical_signals incluye 17 valores pero debería limitarse a top gainers/losers (10 máximo); esto genera redundancia con análisis ya cubiertos"
+  ],
+  "errors": [],
+  "elapsed_seconds": 26.5,
+  "timestamp": "2026-04-12T20:47:35.302402+02:00",
+  "model_leader": "claude-haiku-4-5-20251001"
+}

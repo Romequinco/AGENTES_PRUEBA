@@ -3,9 +3,11 @@ import json
 import time
 import logging
 import calendar
+import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
+import numpy as np
 import pytz
 import pandas as pd
 import feedparser
@@ -24,6 +26,140 @@ _SCRAPER_HEADERS = {
     )
 }
 
+# Días de histórico para calcular indicadores técnicos (MA50 necesita mínimo 50)
+_HISTORY_DAYS = 60
+
+
+# =============================================================================
+# Indicadores técnicos (pandas/numpy puro, sin dependencias extra)
+# =============================================================================
+
+def _rsi(close: pd.Series, period: int = 14) -> float | None:
+    if len(close) < period + 1:
+        return None
+    delta = close.diff().dropna()
+    gain = delta.clip(lower=0).ewm(com=period - 1, min_periods=period).mean()
+    loss = (-delta.clip(upper=0)).ewm(com=period - 1, min_periods=period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+    val = rsi.iloc[-1]
+    return round(float(val), 2) if pd.notna(val) else None
+
+
+def _sma(close: pd.Series, period: int) -> float | None:
+    if len(close) < period:
+        return None
+    val = close.tail(period).mean()
+    return round(float(val), 4) if pd.notna(val) else None
+
+
+
+def _macd(close: pd.Series) -> dict:
+    """Devuelve MACD(12,26), señal(9) e histograma."""
+    if len(close) < 26:
+        return {"macd": None, "signal": None, "histogram": None}
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    hist = macd_line - signal_line
+    return {
+        "macd": round(float(macd_line.iloc[-1]), 4) if pd.notna(macd_line.iloc[-1]) else None,
+        "signal": round(float(signal_line.iloc[-1]), 4) if pd.notna(signal_line.iloc[-1]) else None,
+        "histogram": round(float(hist.iloc[-1]), 4) if pd.notna(hist.iloc[-1]) else None,
+    }
+
+
+def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> float | None:
+    if len(close) < period + 1:
+        return None
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    atr = tr.ewm(com=period - 1, min_periods=period).mean().iloc[-1]
+    return round(float(atr), 4) if pd.notna(atr) else None
+
+
+def _bollinger(close: pd.Series, period: int = 20, std_factor: float = 2.0) -> dict:
+    if len(close) < period:
+        return {"upper": None, "middle": None, "lower": None, "bandwidth": None}
+    rolling = close.tail(period)
+    mid = rolling.mean()
+    std = rolling.std(ddof=1)
+    upper = mid + std_factor * std
+    lower = mid - std_factor * std
+    bandwidth = round(float((upper - lower) / mid * 100), 2) if mid != 0 else None
+    return {
+        "upper": round(float(upper), 4),
+        "middle": round(float(mid), 4),
+        "lower": round(float(lower), 4),
+        "bandwidth": bandwidth,
+    }
+
+
+def _compute_indicators(hist: pd.DataFrame) -> dict:
+    """Calcula todos los indicadores a partir del DataFrame histórico (OHLCV)."""
+    close = hist["Close"].dropna()
+    high = hist["High"].dropna()
+    low = hist["Low"].dropna()
+
+    macd_data = _macd(close)
+    bb = _bollinger(close)
+
+    # Señal cualitativa MACD
+    macd_signal = None
+    if macd_data["histogram"] is not None:
+        macd_signal = "alcista" if macd_data["histogram"] > 0 else "bajista"
+
+    # Posición precio respecto a medias
+    price = float(close.iloc[-1]) if len(close) > 0 else None
+    ma20 = _sma(close, 20)
+    ma50 = _sma(close, 50)
+    price_vs_ma = None
+    if price and ma20 and ma50:
+        if price > ma20 > ma50:
+            price_vs_ma = "por encima de MA20 y MA50 (tendencia alcista)"
+        elif price < ma20 < ma50:
+            price_vs_ma = "por debajo de MA20 y MA50 (tendencia bajista)"
+        elif price > ma50:
+            price_vs_ma = "por encima de MA50, mixto respecto a MA20"
+        else:
+            price_vs_ma = "por debajo de MA50"
+
+    rsi_val = _rsi(close)
+    rsi_signal = None
+    if rsi_val is not None:
+        if rsi_val > 70:
+            rsi_signal = "sobrecomprado"
+        elif rsi_val < 30:
+            rsi_signal = "sobrevendido"
+        else:
+            rsi_signal = "neutral"
+
+    return {
+        "rsi_14": rsi_val,
+        "rsi_signal": rsi_signal,
+        "ma_20": ma20,
+        "ma_50": ma50,
+        "price_vs_ma": price_vs_ma,
+        "macd": macd_data["macd"],
+        "macd_signal": macd_data["signal"],
+        "macd_histogram": macd_data["histogram"],
+        "macd_trend": macd_signal,
+        "atr_14": _atr(high, low, close),
+        "bollinger_upper": bb["upper"],
+        "bollinger_middle": bb["middle"],
+        "bollinger_lower": bb["lower"],
+        "bollinger_bandwidth": bb["bandwidth"],
+    }
+
+
+# =============================================================================
+# Agente Researcher
+# =============================================================================
 
 class ResearcherError(Exception):
     pass
@@ -38,7 +174,6 @@ class ResearcherAgent:
         self.retry_delay = int(config.get("retry_delay", 5))
         self.madrid = pytz.timezone("Europe/Madrid")
 
-        # Acepta componentes precargados (pasados por el leader) o los carga aquí
         if components is not None:
             self.components = components
         else:
@@ -59,21 +194,29 @@ class ResearcherAgent:
 
     def run(self) -> dict:
         prices_file = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
+        indicators_file = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
         news_file = os.path.join(self.raw_dir, f"ibex35_news_{self.date}.json")
 
-        if os.path.exists(prices_file) and os.path.exists(news_file):
+        if os.path.exists(prices_file) and os.path.exists(news_file) and os.path.exists(indicators_file):
             logger.info(f"Datos de {self.date} ya existen, omitiendo descarga.")
-            return {"prices_file": prices_file, "news_file": news_file, "status": "ok", "errors": []}
+            return {
+                "prices_file": prices_file,
+                "indicators_file": indicators_file,
+                "news_file": news_file,
+                "status": "ok",
+                "errors": [],
+            }
 
         errors = []
 
         try:
-            prices_file = self.fetch_prices()
+            prices_file, indicators_file = self.fetch_prices()
         except ResearcherError:
             raise
         except Exception as e:
             errors.append(f"fetch_prices: {e}")
             prices_file = None
+            indicators_file = None
 
         try:
             news_file = self.fetch_news()
@@ -82,11 +225,27 @@ class ResearcherAgent:
             news_file = None
 
         status = "ok" if not errors else ("partial" if prices_file else "error")
-        return {"prices_file": prices_file, "news_file": news_file, "status": status, "errors": errors}
+        return {
+            "prices_file": prices_file,
+            "indicators_file": indicators_file,
+            "news_file": news_file,
+            "status": status,
+            "errors": errors,
+        }
 
-    def fetch_prices(self) -> str:
-        logger.info(f"Descargando precios IBEX 35 para {self.date} ({len(self.tickers)} tickers)")
-        rows = [self._fetch_ticker(t) for t in self.tickers]
+    def fetch_prices(self) -> tuple[str, str]:
+        logger.info(f"Descargando precios e indicadores IBEX 35 para {self.date} ({len(self.tickers)} tickers, {_HISTORY_DAYS}d histórico)")
+        rows = []
+        indicators = {}
+
+        # ^IBEX — valor real del índice
+        ibex_index = self._fetch_index()
+
+        for ticker in self.tickers:
+            row, ind = self._fetch_ticker_full(ticker)
+            rows.append(row)
+            if ind:
+                indicators[ticker] = ind
 
         df = pd.DataFrame(rows)
         valid = df[df["error"].isna() | (df["error"] == "")].shape[0]
@@ -96,15 +255,53 @@ class ResearcherAgent:
             raise ResearcherError("Ningún ticker devolvió datos válidos. Mercado posiblemente cerrado.")
 
         os.makedirs(self.raw_dir, exist_ok=True)
-        out_path = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
-        df.to_csv(out_path, index=False, encoding="utf-8")
-        logger.info(f"Precios guardados en {out_path}")
-        return out_path
 
-    def _fetch_ticker(self, ticker: str) -> dict:
+        prices_path = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
+        df.to_csv(prices_path, index=False, encoding="utf-8")
+        logger.info(f"Precios guardados en {prices_path}")
+
+        indicators_path = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
+        indicators_data = {
+            "date": self.date,
+            "ibex_index": ibex_index,
+            "tickers": indicators,
+        }
+        with open(indicators_path, "w", encoding="utf-8") as f:
+            json.dump(indicators_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Indicadores guardados en {indicators_path} ({len(indicators)} tickers)")
+
+        return prices_path, indicators_path
+
+    def _fetch_index(self) -> dict:
+        """Descarga el valor real del ^IBEX para tener la variación del índice."""
+        try:
+            t = yf.Ticker("^IBEX")
+            hist = t.history(period="5d", auto_adjust=True)
+            if hist.empty or len(hist) < 2:
+                return {}
+            today = hist.iloc[-1]
+            prev = hist.iloc[-2]
+            close = float(today["Close"])
+            prev_close = float(prev["Close"])
+            return {
+                "close": round(close, 2),
+                "prev_close": round(prev_close, 2),
+                "change_abs": round(close - prev_close, 2),
+                "change_pct": round((close - prev_close) / prev_close * 100, 2),
+                "open": round(float(today["Open"]), 2),
+                "high": round(float(today["High"]), 2),
+                "low": round(float(today["Low"]), 2),
+                "volume": int(today["Volume"]) if pd.notna(today["Volume"]) else None,
+            }
+        except Exception as e:
+            logger.warning(f"^IBEX no disponible: {e}")
+            return {}
+
+    def _fetch_ticker_full(self, ticker: str) -> tuple[dict, dict | None]:
         base = {
             "ticker": ticker,
             "name": self.names.get(ticker, ticker),
+            "sector": self.sectors.get(ticker, ""),
             "open": None, "high": None, "low": None, "close": None,
             "volume": None, "prev_close": None, "change_abs": None,
             "change_pct": None, "market_cap": None,
@@ -112,20 +309,22 @@ class ResearcherAgent:
             "fetch_timestamp": datetime.now(self.madrid).isoformat(),
             "error": "",
         }
+
         for attempt in range(self.max_retries):
             try:
                 t = yf.Ticker(ticker)
-                hist = t.history(period="2d", auto_adjust=True)
-                if hist.empty:
+                hist = t.history(period=f"{_HISTORY_DAYS}d", auto_adjust=True)
+                if hist.empty or len(hist) < 1:
                     base["error"] = "Sin datos"
-                    return base
+                    return base, None
 
+                # Datos del día
                 today = hist.iloc[-1]
                 base["open"] = round(float(today["Open"]), 3)
                 base["high"] = round(float(today["High"]), 3)
                 base["low"] = round(float(today["Low"]), 3)
                 base["close"] = round(float(today["Close"]), 3)
-                base["volume"] = int(today["Volume"])
+                base["volume"] = int(today["Volume"]) if pd.notna(today["Volume"]) else None
 
                 if len(hist) >= 2:
                     prev = hist.iloc[-2]
@@ -137,7 +336,15 @@ class ResearcherAgent:
                 base["market_cap"] = getattr(info, "market_cap", None)
                 base["week_52_high"] = getattr(info, "fifty_two_week_high", None)
                 base["week_52_low"] = getattr(info, "fifty_two_week_low", None)
-                return base
+
+                # Indicadores técnicos con todo el histórico
+                indicators = _compute_indicators(hist)
+                indicators["ticker"] = ticker
+                indicators["name"] = self.names.get(ticker, ticker)
+                indicators["close"] = base["close"]
+                indicators["change_pct"] = base["change_pct"]
+
+                return base, indicators
 
             except Exception as e:
                 if attempt < self.max_retries - 1:
@@ -145,7 +352,8 @@ class ResearcherAgent:
                 else:
                     base["error"] = str(e)
                     logger.warning(f"Ticker {ticker} fallido tras {self.max_retries} intentos: {e}")
-        return base
+
+        return base, None
 
     def fetch_news(self) -> str:
         logger.info("Descargando noticias RSS")
@@ -186,9 +394,9 @@ class ResearcherAgent:
 
         for attempt in range(self.max_retries):
             try:
-                # Descarga manual para limpiar caracteres XML inválidos antes de parsear
                 try:
                     raw_bytes = requests.get(feed_url, headers=_SCRAPER_HEADERS, timeout=15).content
+                    # Elimina caracteres de control XML inválidos (excepto \t \n \r)
                     clean = bytes(b for b in raw_bytes if b >= 0x20 or b in (0x09, 0x0A, 0x0D))
                     feed = feedparser.parse(clean)
                 except Exception:
@@ -203,9 +411,13 @@ class ResearcherAgent:
                     title = getattr(entry, "title", "")
                     text_search = f"{title} {summary}".lower()
 
+                    # Detección con word boundaries para evitar falsos positivos
                     tickers_found = [
                         ticker for ticker, aliases in self.aliases.items()
-                        if any(alias.lower() in text_search for alias in aliases)
+                        if any(
+                            re.search(r'\b' + re.escape(alias.lower()) + r'\b', text_search)
+                            for alias in aliases
+                        )
                     ]
 
                     items.append({

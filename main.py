@@ -44,12 +44,22 @@ def check_market_hours() -> bool:
     return now.hour == 17 and now.minute >= 35 or now.hour == 18
 
 
-def is_market_open_today() -> bool:
+def get_last_market_date() -> str | None:
+    """Devuelve la fecha del último día de mercado como 'YYYY-MM-DD', o None si no hay datos."""
     try:
-        data = yf.download("^IBEX", period="1d", progress=False, auto_adjust=True)
-        return not data.empty
+        data = yf.download("^IBEX", period="5d", progress=False, auto_adjust=True)
+        if data.empty:
+            return None
+        return data.index[-1].strftime("%Y-%m-%d")
     except Exception:
-        return False
+        return None
+
+
+def is_market_open_today() -> bool:
+    """True solo si el último dato de ^IBEX corresponde a hoy."""
+    madrid = pytz.timezone("Europe/Madrid")
+    today = datetime.now(madrid).strftime("%Y-%m-%d")
+    return get_last_market_date() == today
 
 
 def main():
@@ -57,8 +67,15 @@ def main():
     logger = setup_logging()
     logger.info("=== Inicio del pipeline IBEX 35 ===")
 
-    if not is_market_open_today():
-        logger.info("Mercado cerrado hoy (festivo o fin de semana). Sin informe.")
+    last_market_date = get_last_market_date()
+    if not last_market_date:
+        logger.info("No se pudo obtener datos del mercado. Sin informe.")
+        sys.exit(0)
+
+    force = os.getenv("FORCE_RUN", "").lower() == "true"
+    today = datetime.now(pytz.timezone("Europe/Madrid")).strftime("%Y-%m-%d")
+    if not force and last_market_date != today:
+        logger.info(f"Mercado cerrado hoy ({today}). Último dato: {last_market_date}. Sin informe.")
         sys.exit(0)
 
     if not check_market_hours():
@@ -100,7 +117,7 @@ def main():
         sys.exit(1)
 
     leader = LeaderAgent(config, logger)
-    result = leader.run()
+    result = leader.run(date=last_market_date)
 
     if result["status"] == "success":
         logger.info(f"Pipeline completado. PDF: {result['pdf_path']}")

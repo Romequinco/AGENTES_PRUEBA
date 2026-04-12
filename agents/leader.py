@@ -17,6 +17,18 @@ logger = logging.getLogger("bolsa.leader")
 SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
 
 
+def _strip_markdown_fence(text: str) -> str:
+    """Extrae el contenido de un bloque ```json ... ``` o ``` ... ```."""
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = lines[1:]  # quitar línea de apertura (```json o ```)
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return text
+
+
 class PipelineError(Exception):
     pass
 
@@ -45,8 +57,8 @@ class LeaderAgent:
         with open(path, encoding="utf-8") as f:
             return f.read()
 
-    def run(self) -> dict:
-        date = datetime.now(self.madrid).strftime("%Y-%m-%d")
+    def run(self, date: str | None = None) -> dict:
+        date = date or datetime.now(self.madrid).strftime("%Y-%m-%d")
         logger.info(f"=== Líder iniciando pipeline para {date} ===")
         start = time.time()
         errors = []
@@ -165,7 +177,7 @@ class LeaderAgent:
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw = response.content[0].text.strip()
-                raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                raw = _strip_markdown_fence(raw)
                 return json.loads(raw)
             except json.JSONDecodeError as e:
                 last_error = str(e)
@@ -237,3 +249,28 @@ class LeaderAgent:
             f"  Tiempo:    {elapsed:.0f}s\n"
             f"  Errores:   {errors if errors else 'ninguno'}"
         )
+        self._save_last_run(result, elapsed)
+
+    def _save_last_run(self, result: dict, elapsed: float):
+        """Persiste el estado del último pipeline en output/last_run.json."""
+        validation = result.get("validation", {})
+        payload = {
+            "status": result.get("status", "unknown"),
+            "date": result.get("date", ""),
+            "pdf_path": result.get("pdf_path"),
+            "qa_score": validation.get("score"),
+            "qa_recommendation": validation.get("recommendation"),
+            "qa_issues": validation.get("issues", []),
+            "errors": result.get("errors", []),
+            "elapsed_seconds": round(elapsed, 1),
+            "timestamp": datetime.now(self.madrid).isoformat(),
+            "model_leader": self.model,
+        }
+        try:
+            os.makedirs(self.output_dir, exist_ok=True)
+            out_path = os.path.join(self.output_dir, "last_run.json")
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            logger.info(f"Estado guardado en {out_path}")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar last_run.json: {e}")
