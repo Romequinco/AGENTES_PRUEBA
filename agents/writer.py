@@ -42,16 +42,18 @@ def _strip_markdown_fence(text: str) -> str:
     return text
 
 COLORS = {
-    "primary": "#003366",      # azul marino — banners de sección
-    "secondary": "#1A5C9A",    # azul medio — sub-secciones
-    "accent": "#C5DCF5",       # azul claro saturado — fondos de cajas
-    "accent_alt": "#E5EFF9",   # azul muy claro — filas alternas
-    "text": "#1A1A1A",
-    "green": "#006600",
-    "red": "#CC0000",
-    "light_gray": "#EAF0F7",   # filas alternas de tabla con tono azulado
-    "border": "#7AADD4",       # borde más visible y con color
-    "white": "#FFFFFF",
+    "primary":    "#1a2332",   # azul muy oscuro institucional — banners principales
+    "secondary":  "#2c3e55",   # azul oscuro derivado — sub-secciones
+    "accent":     "#e8edf3",   # azul muy pálido — fondos de cajas informativas
+    "accent_alt": "#f4f6f8",   # casi blanco azulado — filas alternas de tabla
+    "text":       "#1a2332",   # mismo tono que primary para coherencia tipográfica
+    "green":      "#27ae60",   # verde apagado profesional (no neón)
+    "red":        "#c0392b",   # rojo institucional contenido
+    "light_gray": "#f8f9fa",   # gris casi blanco — filas alternas tabla principal
+    "border":     "#c5ccd4",   # borde sutil, no intrusivo
+    "white":      "#FFFFFF",
+    "green_row":  "#eafaf1",   # fondo filas top gainers (muy tenue)
+    "red_row":    "#fdecea",   # fondo filas top losers (muy tenue)
 }
 
 
@@ -200,27 +202,26 @@ class WriterAgent:
     @staticmethod
     def _change_to_color(chg: float):
         """
-        Convierte una variación % en un color RGB puro verde/rojo/gris.
-        - Neutro (|chg| <= 0.1%): gris medio
-        - Positivo: verde claro → verde oscuro según intensidad
-        - Negativo: rojo claro → rojo oscuro según intensidad
-        Escala saturada en ±3% (intensidad=1 en ≥3%).
-        Canal azul siempre 0 en colores activos para evitar rosas/cian.
+        Convierte una variación % en color RGB profesional (paleta institucional).
+        - Neutro (|chg| <= 0.1%): gris suave
+        - Positivo: verde pálido → #27ae60 (apagado, no neón)
+        - Negativo: rojo pálido → #c0392b (institucional)
+        Escala saturada en ±3%.
         """
         intensity = min(abs(chg) / 3.0, 1.0)
         if abs(chg) <= 0.1:
-            return (0.80, 0.80, 0.80)          # gris neutro
+            return (0.82, 0.84, 0.86)          # gris azulado neutro
         elif chg > 0:
-            # verde claro (0.78, 0.93, 0.78) → verde oscuro (0.05, 0.50, 0.05)
-            r = 0.78 - intensity * 0.73         # 0.78 → 0.05
-            g = 0.93 - intensity * 0.43         # 0.93 → 0.50
-            b = 0.78 - intensity * 0.73         # 0.78 → 0.05  (simétrico a r)
+            # verde pálido (0.80, 0.93, 0.84) → #27ae60 (0.153, 0.682, 0.376)
+            r = 0.80 - intensity * 0.647
+            g = 0.93 - intensity * 0.248
+            b = 0.84 - intensity * 0.464
             return (r, g, b)
         else:
-            # rojo claro (0.93, 0.78, 0.78) → rojo oscuro (0.55, 0.05, 0.05)
-            r = 0.93 - intensity * 0.38         # 0.93 → 0.55
-            g = 0.78 - intensity * 0.73         # 0.78 → 0.05
-            b = 0.78 - intensity * 0.73         # 0.78 → 0.05  (simétrico a g)
+            # rojo pálido (0.96, 0.82, 0.82) → #c0392b (0.753, 0.224, 0.169)
+            r = 0.96 - intensity * 0.207
+            g = 0.82 - intensity * 0.596
+            b = 0.82 - intensity * 0.651
             return (r, g, b)
 
     def _chart_heatmap(self, df: pd.DataFrame) -> str:
@@ -385,17 +386,24 @@ class WriterAgent:
 
             fig, ax = plt.subplots(figsize=(10, 6), facecolor="white")
             ax.set_facecolor("white")
-            bars = ax.barh(labels, values, color=bar_colors, edgecolor="white", height=0.6)
-            ax.axvline(0, color="#555", linewidth=0.8)
+            bars = ax.barh(labels, values, color=bar_colors, edgecolor="none", height=0.45)
+            ax.axvline(0, color=COLORS["secondary"], linewidth=0.8, alpha=0.5)
+            # Etiquetas al final de cada barra
+            x_range = max(abs(v) for v in values) if values else 1
+            offset = x_range * 0.02
             for bar, val in zip(bars, values):
-                ax.text(val + (0.05 if val >= 0 else -0.05), bar.get_y() + bar.get_height() / 2,
+                ax.text(val + (offset if val >= 0 else -offset),
+                        bar.get_y() + bar.get_height() / 2,
                         f"{val:+.2f}%", va="center",
-                        ha="left" if val >= 0 else "right", fontsize=8, color="#1a1a1a")
-            ax.set_xlabel("Variación (%)", fontsize=9)
+                        ha="left" if val >= 0 else "right",
+                        fontsize=8.5, color=COLORS["primary"], fontweight="bold")
             ax.set_title(f"Mejores y peores valores — {self.date}", fontsize=12,
-                         fontweight="bold", color=COLORS["primary"])
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
+                         fontweight="bold", color=COLORS["primary"], pad=10)
+            for spine in ["top", "right", "left", "bottom"]:
+                ax.spines[spine].set_visible(False)
+            ax.tick_params(axis="both", which="both", length=0)
+            ax.set_xlabel("")
+            ax.grid(False)
             plt.tight_layout()
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
             plt.close(fig)
@@ -418,19 +426,25 @@ class WriterAgent:
 
             fig, ax = plt.subplots(figsize=(10, 5), facecolor="white")
             ax.set_facecolor("white")
-            bars = ax.bar(names, values, color=bar_colors, edgecolor="white", width=0.55)
-            ax.axhline(0, color="#555", linewidth=0.8)
+            bars = ax.bar(names, values, color=bar_colors, edgecolor="none", width=0.42)
+            ax.axhline(0, color=COLORS["secondary"], linewidth=0.8, alpha=0.5)
+            y_range = max(abs(v) for v in values) if values else 1
+            offset = y_range * 0.03
             for bar, val in zip(bars, values):
                 ax.text(bar.get_x() + bar.get_width() / 2,
-                        val + (0.03 if val >= 0 else -0.08),
-                        f"{val:+.2f}%", ha="center", va="bottom" if val >= 0 else "top",
-                        fontsize=8, color="#1a1a1a")
-            ax.set_ylabel("Variación media (%)", fontsize=9)
+                        val + (offset if val >= 0 else -offset),
+                        f"{val:+.2f}%", ha="center",
+                        va="bottom" if val >= 0 else "top",
+                        fontsize=8.5, color=COLORS["primary"], fontweight="bold")
             ax.set_title(f"Variación por sector — {self.date}", fontsize=12,
-                         fontweight="bold", color=COLORS["primary"])
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            plt.xticks(rotation=20, ha="right", fontsize=9)
+                         fontweight="bold", color=COLORS["primary"], pad=10)
+            for spine in ["top", "right", "left"]:
+                ax.spines[spine].set_visible(False)
+            ax.spines["bottom"].set_color(COLORS["border"])
+            ax.tick_params(axis="both", which="both", length=0)
+            ax.set_ylabel("")
+            ax.grid(False)
+            plt.xticks(rotation=20, ha="right", fontsize=9, color=COLORS["text"])
             plt.tight_layout()
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
             plt.close(fig)
@@ -449,12 +463,21 @@ class WriterAgent:
 
             fig, ax = plt.subplots(figsize=(10, 5), facecolor="white")
             ax.set_facecolor("white")
-            ax.bar(labels, vols, color=COLORS["secondary"], edgecolor="white", width=0.6)
-            ax.set_ylabel("Volumen (millones)", fontsize=9)
+            bars_v = ax.bar(labels, vols, color=COLORS["secondary"], edgecolor="none", width=0.48)
+            v_range = max(vols) if vols else 1
+            for bar, val in zip(bars_v, vols):
+                ax.text(bar.get_x() + bar.get_width() / 2,
+                        val + v_range * 0.02,
+                        f"{val:.1f}M", ha="center", va="bottom",
+                        fontsize=8, color=COLORS["primary"], fontweight="bold")
             ax.set_title(f"Top 10 valores por volumen — {self.date}", fontsize=12,
-                         fontweight="bold", color=COLORS["primary"])
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
+                         fontweight="bold", color=COLORS["primary"], pad=10)
+            for spine in ["top", "right", "left"]:
+                ax.spines[spine].set_visible(False)
+            ax.spines["bottom"].set_color(COLORS["border"])
+            ax.tick_params(axis="both", which="both", length=0)
+            ax.set_ylabel("")
+            ax.grid(False)
             plt.tight_layout()
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
             plt.close(fig)
@@ -716,10 +739,18 @@ class WriterAgent:
 
         col_widths = [4.2*cm, 1.7*cm, 1.8*cm, 1.8*cm, 1.8*cm, 1.8*cm, 1.9*cm, 1.5*cm]
         tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+        n_rows = len(table_data)
+        C_GREEN_ROW = hex_to_reportlab(COLORS["green_row"])
+        C_RED_ROW   = hex_to_reportlab(COLORS["red_row"])
         row_bg = []
-        for i in range(1, len(table_data)):
-            bg = C_LIGHT_GRAY if i % 2 == 0 else C_WHITE
-            row_bg.append(("BACKGROUND", (0, i), (-1, i), bg))
+        for i in range(1, n_rows):
+            if i <= 5:                          # top 5 mejores — fondo verde muy tenue
+                row_bg.append(("BACKGROUND", (0, i), (-1, i), C_GREEN_ROW))
+            elif i >= n_rows - 5:               # top 5 peores — fondo rojo muy tenue
+                row_bg.append(("BACKGROUND", (0, i), (-1, i), C_RED_ROW))
+            else:
+                bg = C_LIGHT_GRAY if i % 2 == 0 else C_WHITE
+                row_bg.append(("BACKGROUND", (0, i), (-1, i), bg))
         tbl.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), C_PRIMARY),
             ("TEXTCOLOR", (0, 0), (-1, 0), C_WHITE),
@@ -728,9 +759,11 @@ class WriterAgent:
             ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
             ("ALIGN", (0, 0), (1, -1), "LEFT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("GRID", (0, 0), (-1, -1), 0.4, C_BORDER),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("GRID", (0, 0), (-1, -1), 0.3, C_BORDER),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
         ] + row_bg))
         story.append(tbl)
 

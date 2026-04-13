@@ -5,11 +5,11 @@
   "qa_score": 92,
   "qa_recommendation": "approved",
   "qa_issues": [
-    "sector_analysis contiene 12 entradas en lugar de 6 sectores únicos (hay duplicados: 'Transporte y distribución' aparece 2 veces, 'Telecomunicaciones y otros' aparece como único, pero el conteo total es 12 items en array)",
-    "Algunos tickers en sector_analysis no pertenecen al IBEX 35 estándar o requieren validación (GRF.MC mencionado pero no en top_gainers/losers, requiere confirmación)"
+    "sector_analysis contiene 11 sectores en lugar de 6 (duplicación: 'Transporte y distribución' aparece dos veces con análisis ligeramente diferentes)",
+    "Algunos tickers en sector_analysis no pertenecen al IBEX 35 o están duplicados (GRF.MC mencionado en pharma pero sin cotización clara en sesión)"
   ],
   "errors": [],
-  "elapsed_seconds": 33.5,
-  "timestamp": "2026-04-13T21:31:43.673356+02:00",
+  "elapsed_seconds": 36.1,
+  "timestamp": "2026-04-13T21:41:29.258984+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }
