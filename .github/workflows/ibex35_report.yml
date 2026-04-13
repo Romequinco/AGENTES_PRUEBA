@@ -10,7 +10,7 @@ on:
       force_run:
         description: 'Forzar ejecución ignorando horario'
         required: false
-        default: 'false'
+        default: 'true'
 
 jobs:
   generate-report:
@@ -55,7 +55,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Enviar informe por email
-        if: success()
+        if: always()
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
