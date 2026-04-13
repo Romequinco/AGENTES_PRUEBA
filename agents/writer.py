@@ -197,6 +197,32 @@ class WriterAgent:
         charts["volume_bar"] = self._chart_volume_bar(valid)
         return charts
 
+    @staticmethod
+    def _change_to_color(chg: float):
+        """
+        Convierte una variación % en un color RGB puro verde/rojo/gris.
+        - Neutro (|chg| <= 0.1%): gris medio
+        - Positivo: verde claro → verde oscuro según intensidad
+        - Negativo: rojo claro → rojo oscuro según intensidad
+        Escala saturada en ±3% (intensidad=1 en ≥3%).
+        Canal azul siempre 0 en colores activos para evitar rosas/cian.
+        """
+        intensity = min(abs(chg) / 3.0, 1.0)
+        if abs(chg) <= 0.1:
+            return (0.80, 0.80, 0.80)          # gris neutro
+        elif chg > 0:
+            # verde claro (0.78, 0.93, 0.78) → verde oscuro (0.05, 0.50, 0.05)
+            r = 0.78 - intensity * 0.73         # 0.78 → 0.05
+            g = 0.93 - intensity * 0.43         # 0.93 → 0.50
+            b = 0.78 - intensity * 0.73         # 0.78 → 0.05  (simétrico a r)
+            return (r, g, b)
+        else:
+            # rojo claro (0.93, 0.78, 0.78) → rojo oscuro (0.55, 0.05, 0.05)
+            r = 0.93 - intensity * 0.38         # 0.93 → 0.55
+            g = 0.78 - intensity * 0.73         # 0.78 → 0.05
+            b = 0.78 - intensity * 0.73         # 0.78 → 0.05  (simétrico a g)
+            return (r, g, b)
+
     def _chart_heatmap(self, df: pd.DataFrame) -> str:
         """Treemap agrupado por sector, tamaño proporcional a capitalización bursátil."""
         path = os.path.join(self.charts_dir, "heatmap.png")
@@ -207,7 +233,6 @@ class WriterAgent:
             df["change_pct"] = pd.to_numeric(df["change_pct"], errors="coerce").fillna(0)
             df["market_cap"] = pd.to_numeric(df.get("market_cap", pd.Series(dtype=float)), errors="coerce")
 
-            # Usar market_cap real; si no hay datos, asignar peso uniforme
             if df["market_cap"].isna().all():
                 df["market_cap"] = 1.0
             else:
@@ -215,117 +240,124 @@ class WriterAgent:
                 df["market_cap"] = df["market_cap"].fillna(median_cap)
             df["market_cap"] = df["market_cap"].clip(lower=1e6)
 
-            # Agrupar por sector
             if "sector" not in df.columns or df["sector"].isna().all():
                 df["sector"] = "IBEX 35"
             df["sector"] = df["sector"].fillna("Otros")
 
             sector_caps = df.groupby("sector")["market_cap"].sum().sort_values(ascending=False)
             total_cap = sector_caps.sum()
-
-            fig, ax = plt.subplots(figsize=(14, 9), facecolor="white")
-            ax.set_facecolor("white")
-            ax.axis("off")
-
-            # Layout de sectores usando squarify sobre el canvas completo
             sector_sizes = sector_caps.values.tolist()
             sector_names = sector_caps.index.tolist()
+
+            # ── Layout: treemap ocupa la parte superior, leyenda sectorial debajo ──
+            fig = plt.figure(figsize=(14, 10), facecolor="white")
+            ax = fig.add_axes([0.01, 0.12, 0.98, 0.83])   # treemap
+            ax_leg = fig.add_axes([0.01, 0.0, 0.98, 0.11])  # leyenda sectorial
+            ax.set_facecolor("white")
+            ax.axis("off")
+            ax_leg.axis("off")
+
             sector_rects = squarify.squarify(
                 squarify.normalize_sizes(sector_sizes, 100, 100), 0, 0, 100, 100
             )
 
-            PADDING = 0.8  # margen interior del sector para etiqueta
+            PAD = 0.5
+            small_sectors = []   # sectores cuyos bloques son demasiado pequeños para etiqueta
 
             for s_rect, s_name in zip(sector_rects, sector_names):
                 sx, sy, sw, sh = s_rect["x"], s_rect["y"], s_rect["dx"], s_rect["dy"]
+                sector_area = sw * sh
 
-                # Dibujar borde de sector
-                sector_border = mpatches.FancyBboxPatch(
-                    (sx, sy), sw, sh,
-                    boxstyle="square,pad=0",
-                    facecolor="none", edgecolor="#ffffff", linewidth=2.5, zorder=3
-                )
-                ax.add_patch(sector_border)
+                # Borde de sector (blanco grueso)
+                ax.add_patch(mpatches.FancyBboxPatch(
+                    (sx, sy), sw, sh, boxstyle="square,pad=0",
+                    facecolor="none", edgecolor="#ffffff", linewidth=3, zorder=3
+                ))
 
                 # Tickers dentro del sector
-                tickers_in = df[df["sector"] == s_name].copy()
-                tickers_in = tickers_in.sort_values("market_cap", ascending=False)
+                tickers_in = df[df["sector"] == s_name].sort_values("market_cap", ascending=False)
                 t_sizes = tickers_in["market_cap"].tolist()
-
                 if not t_sizes:
                     continue
 
                 t_rects = squarify.squarify(
-                    squarify.normalize_sizes(t_sizes, sw - PADDING * 2, sh - PADDING * 2),
-                    sx + PADDING, sy + PADDING,
-                    sw - PADDING * 2, sh - PADDING * 2
+                    squarify.normalize_sizes(t_sizes, sw - PAD * 2, sh - PAD * 2),
+                    sx + PAD, sy + PAD, sw - PAD * 2, sh - PAD * 2
                 )
 
                 for t_rect, (_, t_row) in zip(t_rects, tickers_in.iterrows()):
                     tx, ty, tw, th = t_rect["x"], t_rect["y"], t_rect["dx"], t_rect["dy"]
-                    chg = t_row["change_pct"]
-
-                    # Color por cambio porcentual (escala saturada en ±3%)
+                    chg = float(t_row["change_pct"])
+                    face = self._change_to_color(chg)
                     intensity = min(abs(chg) / 3.0, 1.0)
-                    if chg > 0.1:
-                        r_c = 1 - intensity * 0.75
-                        g_c = 0.35 + intensity * 0.45
-                        b_c = 1 - intensity * 0.75
-                        face = (r_c, g_c, b_c)
-                    elif chg < -0.1:
-                        r_c = 0.35 + intensity * 0.55
-                        g_c = 1 - intensity * 0.75
-                        b_c = 1 - intensity * 0.75
-                        face = (r_c, g_c, b_c)
-                    else:
-                        face = (0.82, 0.82, 0.82)
 
-                    rect = mpatches.FancyBboxPatch(
-                        (tx, ty), tw, th,
-                        boxstyle="square,pad=0",
-                        facecolor=face, edgecolor="#ffffff", linewidth=0.6, zorder=2
-                    )
-                    ax.add_patch(rect)
+                    ax.add_patch(mpatches.FancyBboxPatch(
+                        (tx, ty), tw, th, boxstyle="square,pad=0",
+                        facecolor=face, edgecolor="#ffffff", linewidth=0.5, zorder=2
+                    ))
 
-                    # Etiqueta solo si el bloque es suficientemente grande
-                    if tw > 2.5 and th > 1.8:
+                    # Ticker + variación dentro del bloque si cabe
+                    if tw > 2.2 and th > 1.6:
                         ticker_short = str(t_row.get("ticker", "")).replace(".MC", "")
                         chg_str = f"{chg:+.1f}%"
-                        font_size = max(5.5, min(9, tw * 0.85))
-                        text_color = "#ffffff" if intensity > 0.4 else "#1a1a1a"
-                        ax.text(tx + tw / 2, ty + th * 0.58, ticker_short,
-                                ha="center", va="center", fontsize=font_size,
-                                fontweight="bold", color=text_color, zorder=4, clip_on=True)
-                        ax.text(tx + tw / 2, ty + th * 0.3, chg_str,
-                                ha="center", va="center", fontsize=font_size * 0.85,
-                                color=text_color, zorder=4, clip_on=True)
+                        fsize = max(5.0, min(8.5, min(tw, th) * 0.75))
+                        txt_color = "#ffffff" if intensity > 0.35 else "#111111"
+                        ax.text(tx + tw / 2, ty + th * 0.60, ticker_short,
+                                ha="center", va="center", fontsize=fsize,
+                                fontweight="bold", color=txt_color, zorder=4, clip_on=True)
+                        ax.text(tx + tw / 2, ty + th * 0.28, chg_str,
+                                ha="center", va="center", fontsize=fsize * 0.82,
+                                color=txt_color, zorder=4, clip_on=True)
 
-                # Etiqueta del sector (sobre el bloque, arriba)
-                if sw > 5 and sh > 3:
-                    sector_pct = sector_caps[s_name] / total_cap * 100
-                    ax.text(sx + sw / 2, sy + sh - PADDING * 0.4,
-                            f"{s_name}  ({sector_pct:.0f}%)",
-                            ha="center", va="top", fontsize=7.5, fontweight="bold",
-                            color="#ffffff", zorder=5,
-                            bbox=dict(boxstyle="round,pad=0.15", facecolor="#00000066", edgecolor="none"))
+                # ── Etiqueta de sector — tamaño proporcional al bloque ──
+                sector_pct = sector_caps[s_name] / total_cap * 100
+                label = f"{s_name} ({sector_pct:.0f}%)"
+
+                if sector_area >= 200:          # bloques grandes: etiqueta dentro grande
+                    fsize_s = max(8, min(13, (sector_area ** 0.45) * 0.55))
+                    ax.text(sx + sw / 2, sy + sh - PAD * 0.6,
+                            label, ha="center", va="top",
+                            fontsize=fsize_s, fontweight="bold", color="#ffffff", zorder=5,
+                            bbox=dict(boxstyle="round,pad=0.2", facecolor="#00000077", edgecolor="none"))
+                elif sector_area >= 60:         # bloques medianos: etiqueta compacta
+                    fsize_s = max(6.5, min(8.5, (sector_area ** 0.40) * 0.55))
+                    ax.text(sx + sw / 2, sy + sh - PAD * 0.4,
+                            label, ha="center", va="top",
+                            fontsize=fsize_s, fontweight="bold", color="#ffffff", zorder=5,
+                            bbox=dict(boxstyle="round,pad=0.12", facecolor="#00000077", edgecolor="none"))
+                else:                           # bloques pequeños: referencia en leyenda inferior
+                    small_sectors.append((s_name, sector_pct))
 
             ax.set_xlim(0, 100)
             ax.set_ylim(0, 100)
-            ax.set_title(f"Treemap IBEX 35 por capitalización bursátil — {self.date}",
-                         fontsize=13, fontweight="bold", color=COLORS["primary"], pad=10)
+            ax.set_title(f"Mapa de calor IBEX 35 — {self.date}",
+                         fontsize=12, fontweight="bold", color=COLORS["primary"], pad=6)
 
-            # Leyenda de colores
-            legend_elements = [
-                mpatches.Patch(facecolor=(0.25, 0.70, 0.25), label="Subida fuerte (>+3%)"),
-                mpatches.Patch(facecolor=(0.70, 0.90, 0.70), label="Subida leve"),
-                mpatches.Patch(facecolor=(0.82, 0.82, 0.82), label="Sin cambios"),
-                mpatches.Patch(facecolor=(0.90, 0.70, 0.70), label="Caída leve"),
-                mpatches.Patch(facecolor=(0.90, 0.25, 0.25), label="Caída fuerte (<-3%)"),
+            # ── Leyenda de escala cromática (esquina superior derecha del treemap) ──
+            color_legend = [
+                (self._change_to_color(4.0),  ">+3%  subida fuerte"),
+                (self._change_to_color(1.5),  "+1-3% subida"),
+                (self._change_to_color(0.0),  "  0%  sin cambios"),
+                (self._change_to_color(-1.5), "-1-3% caída"),
+                (self._change_to_color(-4.0), "<-3%  caída fuerte"),
             ]
-            ax.legend(handles=legend_elements, loc="lower right", fontsize=7,
-                      framealpha=0.85, edgecolor="#cccccc")
+            legend_patches = [mpatches.Patch(facecolor=c, label=l, edgecolor="#888888")
+                              for c, l in color_legend]
+            ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+                      framealpha=0.90, edgecolor="#aaaaaa", title="Variación diaria",
+                      title_fontsize=7)
 
-            plt.tight_layout()
+            # ── Leyenda inferior: sectores pequeños que no caben en el bloque ──
+            if small_sectors:
+                legend_text = "Sectores pequeños: " + "  |  ".join(
+                    f"{n} ({p:.0f}%)" for n, p in small_sectors
+                )
+            else:
+                legend_text = "Tamaño proporcional a capitalización bursátil"
+            ax_leg.text(0.5, 0.6, legend_text, ha="center", va="center",
+                        fontsize=7.5, color="#333333",
+                        transform=ax_leg.transAxes)
+
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
             plt.close(fig)
         except Exception as e:
@@ -375,9 +407,9 @@ class WriterAgent:
                 return None
             names = [s["sector"] for s in sectors]
             values = [s.get("avg_change_pct", 0) or 0 for s in sectors]
-            bar_colors = [COLORS["green"] if v > 0 else COLORS["red"] for v in values]
             sorted_pairs = sorted(zip(values, names), reverse=True)
             values, names = zip(*sorted_pairs)
+            bar_colors = [COLORS["green"] if v > 0 else COLORS["red"] for v in values]
 
             fig, ax = plt.subplots(figsize=(10, 5), facecolor="white")
             ax.set_facecolor("white")
@@ -435,6 +467,7 @@ class WriterAgent:
         style_normal = ParagraphStyle("normal_es", parent=styles["Normal"],
                                       fontName="Helvetica", fontSize=9,
                                       leading=13, spaceAfter=0, spaceBefore=0,
+                                      alignment=4,  # TA_JUSTIFY
                                       textColor=colors.HexColor(COLORS["text"]))
         style_banner_h1 = ParagraphStyle("banner_h1", fontName="Helvetica-Bold", fontSize=14,
                                           textColor=C_WHITE, leading=18,
@@ -449,7 +482,11 @@ class WriterAgent:
         style_small = ParagraphStyle("small", parent=styles["Normal"],
                                       fontName="Helvetica", fontSize=7.5,
                                       leading=10, spaceAfter=0, spaceBefore=0,
+                                      alignment=4,  # TA_JUSTIFY
                                       textColor=colors.HexColor("#222222"))
+        style_small_white = ParagraphStyle("small_white", parent=style_small,
+                                            fontName="Helvetica-Bold",
+                                            textColor=C_WHITE, alignment=0)
         style_portada_title = ParagraphStyle("portada_title", fontName="Helvetica-Bold",
                                               fontSize=20, textColor=C_WHITE,
                                               leading=24, spaceAfter=0, spaceBefore=0)
@@ -809,10 +846,10 @@ class WriterAgent:
             story.append(SP)
             # Máximo 10 señales; todas las celdas como Paragraph para garantizar word-wrap
             sig_header = [
-                Paragraph("<b>Ticker</b>", style_small),
-                Paragraph("<b>Señal técnica</b>", style_small),
-                Paragraph("<b>RSI 14</b>", style_small),
-                Paragraph("<b>Comentario</b>", style_small),
+                Paragraph("Ticker", style_small_white),
+                Paragraph("Señal técnica", style_small_white),
+                Paragraph("RSI 14", style_small_white),
+                Paragraph("Comentario", style_small_white),
             ]
             sig_data = [sig_header]
             for s in signals[:10]:

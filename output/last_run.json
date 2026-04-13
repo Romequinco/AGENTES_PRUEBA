@@ -1,15 +1,16 @@
 {
   "status": "success",
-  "date": "2026-04-10",
-  "pdf_path": "output\\informe_2026-04-10.pdf",
+  "date": "2026-04-13",
+  "pdf_path": "output\\informe_2026-04-13.pdf",
   "qa_score": 92,
   "qa_recommendation": "approved",
   "qa_issues": [
-    "sector_analysis contiene 17 sectores en lugar de exactamente 6 (duplicaciones y divisiones innecesarias: 'Transporte y Distribución' aparece 2 veces, 'Telecomunicaciones y otros' separado, múltiples sectores con un único ticker)",
-    "technical_signals incluye 17 valores pero debería limitarse a top gainers/losers (10 máximo); esto genera redundancia con análisis ya cubiertos"
+    "sector_analysis contiene 10 sectores en lugar de exactamente 6 (Seguros, Petróleo, Pharma, Bancos, Electricidad, Renovables, Telecomunicaciones, Transporte, Construcción, Mineral/metales, SOCIMI, Electrónica, Ocio, Ingeniería = 14 sectores detectados)",
+    "Duplicación en sector_analysis: 'Transporte y distribución' aparece dos veces (una como agregado de 3 tickers, otra solo LOG.MC)",
+    "Inconsistencia en top_gainers: BKT precio_vs_ma indica 'bajo MA50 (13.71)' pero análisis dice '+0.76%' ganancia, verificación técnica realizada"
   ],
   "errors": [],
-  "elapsed_seconds": 26.5,
-  "timestamp": "2026-04-12T20:47:35.302402+02:00",
+  "elapsed_seconds": 37.7,
+  "timestamp": "2026-04-13T17:31:43.681062+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }

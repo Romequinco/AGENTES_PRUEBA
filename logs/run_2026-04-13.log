@@ -1,0 +1,105 @@
+2026-04-13 17:08:23,601 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-13 17:08:26,799 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-13 17:08:26,802 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:08:26,802 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:08:27,310 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-13 ===
+2026-04-13 17:08:27,311 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-13 17:08:27,311 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:08:27,312 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:08:27,312 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-13 17:08:27,312 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:08:27,312 [INFO] bolsa.researcher: Descargando precios e indicadores IBEX 35 para 2026-04-13 (35 tickers, 60d histórico)
+2026-04-13 17:08:43,528 [INFO] bolsa.researcher: Tickers con datos válidos: 35/35
+2026-04-13 17:08:43,539 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-13.csv
+2026-04-13 17:08:43,541 [INFO] bolsa.researcher: Indicadores guardados en data/raw\ibex35_indicators_2026-04-13.json (35 tickers)
+2026-04-13 17:08:43,541 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-13 17:08:44,173 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 47 noticias
+2026-04-13 17:08:56,483 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-13 17:08:56,485 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-13.json (47 items)
+2026-04-13 17:08:56,485 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-13 17:08:56,486 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-13 17:10:52,143 [INFO] bolsa.analyst: Analyst respuesta: stop_reason=end_turn, content_blocks=1, chars=37424
+2026-04-13 17:10:52,143 [INFO] bolsa.analyst: Analyst primeros 300 chars: {
+  "market_summary": {
+    "ibex35_performance": "bajista",
+    "ibex35_change_pct": -0.98,
+    "ibex35_close_pts": 18025.7,
+    "market_sentiment": "negativo",
+    "volatility_level": "moderada",
+    "volume_vs_average": "normal",
+    "summary_text": "El IBEX 35 cerró en rojo el 13 de abril con un
+2026-04-13 17:10:52,146 [INFO] bolsa.analyst: Análisis guardado en data/analysis\ibex35_analysis_2026-04-13.json
+2026-04-13 17:10:52,146 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-13 17:10:52,146 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-13 17:11:24,701 [WARNING] bolsa.writer: Error generando treemap: No module named 'squarify'
+2026-04-13 17:11:25,575 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-13.pdf (239 KB)
+2026-04-13 17:11:25,577 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-13.pdf
+2026-04-13 17:11:25,577 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-13 17:11:28,693 [INFO] bolsa.leader: [ QA ] Score: 92/100 — APPROVED
+2026-04-13 17:11:28,696 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-13
+  PDF:       output\informe_2026-04-13.pdf
+  QA Score:  92/100
+  Tiempo:    181s
+  Errores:   ninguno
+2026-04-13 17:11:28,697 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-13 17:11:28,697 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-13.pdf
+2026-04-13 17:25:57,674 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-13 17:25:59,541 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-13 17:25:59,542 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:25:59,542 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:25:59,992 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-13 ===
+2026-04-13 17:25:59,993 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-13 17:25:59,993 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:25:59,993 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:25:59,994 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-13 17:25:59,994 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:25:59,994 [INFO] bolsa.researcher: Datos de 2026-04-13 ya existen, omitiendo descarga.
+2026-04-13 17:25:59,994 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-13 17:25:59,994 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-13 17:26:00,432 [INFO] bolsa.analyst: Análisis de 2026-04-13 ya existe y está aprobado. Omitiendo LLM.
+2026-04-13 17:26:00,432 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-13 17:26:00,432 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-13 17:26:33,624 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-13.pdf (403 KB)
+2026-04-13 17:26:33,626 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-13.pdf
+2026-04-13 17:26:33,626 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-13 17:26:37,056 [INFO] bolsa.leader: [ QA ] Score: 92/100 — APPROVED
+2026-04-13 17:26:37,059 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-13
+  PDF:       output\informe_2026-04-13.pdf
+  QA Score:  92/100
+  Tiempo:    37s
+  Errores:   ninguno
+2026-04-13 17:26:37,060 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-13 17:26:37,061 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-13.pdf
+2026-04-13 17:31:03,802 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-13 17:31:05,587 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-13 17:31:05,588 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:31:05,588 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:31:06,017 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-13 ===
+2026-04-13 17:31:06,017 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-13 17:31:06,018 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 17:31:06,018 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:31:06,018 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-13 17:31:06,018 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 17:31:06,018 [INFO] bolsa.researcher: Datos de 2026-04-13 ya existen, omitiendo descarga.
+2026-04-13 17:31:06,018 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-13 17:31:06,018 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-13 17:31:06,418 [INFO] bolsa.analyst: Análisis de 2026-04-13 ya existe y está aprobado. Omitiendo LLM.
+2026-04-13 17:31:06,419 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-13 17:31:06,419 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-13 17:31:40,184 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-13.pdf (412 KB)
+2026-04-13 17:31:40,186 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-13.pdf
+2026-04-13 17:31:40,186 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-13 17:31:43,676 [INFO] bolsa.leader: [ QA ] Score: 92/100 — APPROVED
+2026-04-13 17:31:43,680 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-13
+  PDF:       output\informe_2026-04-13.pdf
+  QA Score:  92/100
+  Tiempo:    38s
+  Errores:   ninguno
+2026-04-13 17:31:43,681 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-13 17:31:43,682 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-13.pdf
