@@ -53,3 +53,61 @@ jobs:
           path: logs/run_*.log
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Enviar informe por email
+        if: success()
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python - <<'EOF'
+          import os, smtplib, glob
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.text import MIMEText
+          from email.mime.application import MIMEApplication
+          from datetime import date
+
+          GMAIL_USER = os.environ["GMAIL_USER"]
+          GMAIL_PASS = os.environ["GMAIL_APP_PASSWORD"]
+          DEST       = "romequinco@gmail.com"
+
+          # Buscar el PDF generado hoy
+          pdfs = sorted(glob.glob("output/informe_*.pdf"))
+          pdf_path = pdfs[-1] if pdfs else None
+
+          fecha_hoy = date.today().strftime("%d/%m/%Y")
+          asunto = f"IBEX 35 — Informe Diario {fecha_hoy}"
+
+          cuerpo = f"""\
+          Hola,
+
+          Adjunto encontrarás el informe automático del IBEX 35 correspondiente a la sesión del {fecha_hoy}.
+
+          El informe incluye:
+          • Resumen ejecutivo y titular de portada
+          • Mapa de calor por capitalización bursátil
+          • Análisis sectorial y mejores/peores valores
+          • Noticias con impacto en el mercado
+          • Puntos de vigilancia para los próximos días
+
+          Este mensaje ha sido generado automáticamente.
+          """
+
+          msg = MIMEMultipart()
+          msg["From"]    = GMAIL_USER
+          msg["To"]      = DEST
+          msg["Subject"] = asunto
+          msg.attach(MIMEText(cuerpo, "plain", "utf-8"))
+
+          if pdf_path:
+              with open(pdf_path, "rb") as f:
+                  part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
+              part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
+              msg.attach(part)
+
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+              smtp.login(GMAIL_USER, GMAIL_PASS)
+              smtp.sendmail(GMAIL_USER, DEST, msg.as_string())
+
+          print(f"Email enviado a {DEST}" + (f" con {os.path.basename(pdf_path)}" if pdf_path else " (sin PDF adjunto)"))
+          EOF
