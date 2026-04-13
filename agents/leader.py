@@ -159,6 +159,7 @@ class LeaderAgent:
                     max_tokens=512,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
+                    timeout=300.0,
                 )
                 raw = response.content[0].text.strip()
                 raw = strip_markdown_fence(raw)
@@ -179,32 +180,53 @@ class LeaderAgent:
         issues = []
         score = 0
 
+        # Campos obligatorios de primer nivel (20 pts)
         required_fields = ["market_summary", "top_gainers", "top_losers", "sector_analysis", "report_highlights"]
-        if all(f in analysis for f in required_fields):
+        missing = [f for f in required_fields if f not in analysis]
+        if not missing:
             score += 20
         else:
-            missing = [f for f in required_fields if f not in analysis]
             issues.append(f"Campos faltantes: {missing}")
 
+        # Cantidad de gainers/losers con subcampos mínimos (20 pts)
         gainers = analysis.get("top_gainers", [])
         losers = analysis.get("top_losers", [])
-        if len(gainers) == 5 and len(losers) == 5:
-            score += 15
+        required_subfields = {"ticker", "name", "change_pct"}
+        gainers_ok = len(gainers) >= 3 and all(required_subfields.issubset(g) for g in gainers)
+        losers_ok = len(losers) >= 3 and all(required_subfields.issubset(l) for l in losers)
+        if gainers_ok and losers_ok:
+            score += 20
         else:
-            issues.append(f"Gainers: {len(gainers)}/5, Losers: {len(losers)}/5")
+            issues.append(f"Gainers válidos: {len(gainers)}, Losers válidos: {len(losers)} (mínimo 3 con ticker/name/change_pct)")
 
+        # Gainers y losers no son los mismos tickers (10 pts)
+        gainer_tickers = {g.get("ticker") for g in gainers}
+        loser_tickers = {l.get("ticker") for l in losers}
+        if not gainer_tickers & loser_tickers:
+            score += 10
+        else:
+            issues.append(f"Tickers repetidos entre gainers y losers: {gainer_tickers & loser_tickers}")
+
+        # Sectores (mínimo 4, no exactamente 6) (15 pts)
         sectors = analysis.get("sector_analysis", [])
-        if len(sectors) == 6:
+        if len(sectors) >= 4:
             score += 15
         else:
-            issues.append(f"Sectores: {len(sectors)}/6")
+            issues.append(f"Sectores insuficientes: {len(sectors)} (mínimo 4)")
 
+        # report_highlights no vacío (15 pts)
+        highlights = analysis.get("report_highlights", [])
+        if isinstance(highlights, list) and len(highlights) > 0:
+            score += 15
+        else:
+            issues.append("report_highlights vacío o ausente")
+
+        # Tamaño del PDF (20 pts)
         if pdf_size_kb > 100:
-            score += 15
+            score += 20
         else:
-            issues.append(f"PDF demasiado pequeño: {pdf_size_kb:.0f}KB")
+            issues.append(f"PDF demasiado pequeño: {pdf_size_kb:.0f}KB (mínimo 100KB)")
 
-        score += 35
         recommendation = "approved" if score >= 70 else ("retry" if score >= 40 else "abort")
         return {"validation_passed": score >= 70, "score": score, "issues": issues, "recommendation": recommendation}
 

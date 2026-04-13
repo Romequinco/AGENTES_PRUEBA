@@ -137,6 +137,7 @@ class WriterAgent:
                     max_tokens=4096,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
+                    timeout=300.0,
                 )
                 raw = response.content[0].text.strip()
                 raw = strip_markdown_fence(raw)
@@ -171,6 +172,22 @@ class WriterAgent:
             "disclaimer": "Este informe ha sido generado de forma automatizada con fines meramente informativos y no constituye asesoramiento financiero ni recomendación de inversión.",
         }
 
+    @staticmethod
+    def _chart_placeholder(path: str, label: str) -> str:
+        """Genera un PNG de placeholder gris cuando un chart secundario falla."""
+        try:
+            fig, ax = plt.subplots(figsize=(10, 4), facecolor="#f4f6f8")
+            ax.set_facecolor("#f4f6f8")
+            ax.text(0.5, 0.5, f"Datos no disponibles\n({label})",
+                    ha="center", va="center", fontsize=11,
+                    color="#888888", transform=ax.transAxes)
+            ax.axis("off")
+            fig.savefig(path, dpi=100, bbox_inches="tight", facecolor="#f4f6f8")
+            plt.close(fig)
+            return path
+        except Exception:
+            return None
+
     def generate_charts(self, prices_df: pd.DataFrame, analysis: dict) -> dict:
         os.makedirs(self.charts_dir, exist_ok=True)
         valid = prices_df[prices_df["error"].isna() | (prices_df["error"] == "")].copy()
@@ -179,9 +196,18 @@ class WriterAgent:
 
         charts = {}
         charts["heatmap"] = self._chart_heatmap(valid)
-        charts["top_movers"] = self._chart_top_movers(valid)
-        charts["sector_bar"] = self._chart_sector_bar(analysis)
-        charts["volume_bar"] = self._chart_volume_bar(valid)
+        if not charts["heatmap"]:
+            raise WriterError("No se pudo generar el mapa de calor (heatmap). Abortando generación de PDF.")
+
+        placeholder_movers = os.path.join(self.charts_dir, "top_movers_placeholder.png")
+        charts["top_movers"] = self._chart_top_movers(valid) or self._chart_placeholder(placeholder_movers, "top movers")
+
+        placeholder_sector = os.path.join(self.charts_dir, "sector_bar_placeholder.png")
+        charts["sector_bar"] = self._chart_sector_bar(analysis) or self._chart_placeholder(placeholder_sector, "sectores")
+
+        placeholder_volume = os.path.join(self.charts_dir, "volume_bar_placeholder.png")
+        charts["volume_bar"] = self._chart_volume_bar(valid) or self._chart_placeholder(placeholder_volume, "volumen")
+
         return charts
 
     @staticmethod
@@ -536,10 +562,13 @@ class WriterAgent:
         SP = Spacer(1, 0.15 * cm)   # espaciador compacto estándar entre elementos
 
         # ── Fechas ────────────────────────────────────────────────────────
-        date_parts = self.date.split("-")
         meses = ["enero","febrero","marzo","abril","mayo","junio",
                  "julio","agosto","septiembre","octubre","noviembre","diciembre"]
-        date_es = f"{int(date_parts[2])} de {meses[int(date_parts[1])-1]} de {date_parts[0]}"
+        try:
+            dt = datetime.strptime(self.date, "%Y-%m-%d")
+            date_es = f"{dt.day} de {meses[dt.month - 1]} de {dt.year}"
+        except ValueError:
+            date_es = self.date
         date_footer = datetime.now(self.madrid).strftime("%d/%m/%Y")
 
         story = []
@@ -712,8 +741,8 @@ class WriterAgent:
             vol = row.get("volume", 0)
             vol = vol if pd.notna(vol) else 0
             table_data.append([
-                Paragraph(str(row.get("name", ""))[:22], style_small),
-                Paragraph(str(row.get("ticker", "")).replace(".MC",""), style_small),
+                Paragraph(str(row.get("name") or "")[:22], style_small),
+                Paragraph(str(row.get("ticker") or "").replace(".MC",""), style_small),
                 Paragraph(f'{row.get("open", 0) or 0:.2f}', style_small),
                 Paragraph(f'{row.get("high", 0) or 0:.2f}', style_small),
                 Paragraph(f'{row.get("low", 0) or 0:.2f}', style_small),
@@ -781,10 +810,10 @@ class WriterAgent:
                 g_chg = g.get("change_pct", 0) or 0
                 l_chg = l.get("change_pct", 0) or 0
                 gl_data.append([
-                    Paragraph(g.get("name", ""), style_small) if g else Paragraph("", style_small),
+                    Paragraph(str(g.get("name") or ""), style_small) if g else Paragraph("", style_small),
                     Paragraph(f'<font color="{COLORS["green"]}"><b>+{g_chg:.2f}%</b></font>', style_small) if g else Paragraph("", style_small),
                     Paragraph("", style_small),
-                    Paragraph(l.get("name", ""), style_small) if l else Paragraph("", style_small),
+                    Paragraph(str(l.get("name") or ""), style_small) if l else Paragraph("", style_small),
                     Paragraph(f'<font color="{COLORS["red"]}"><b>{l_chg:.2f}%</b></font>', style_small) if l else Paragraph("", style_small),
                 ])
             row_bg_gl = []
@@ -879,10 +908,10 @@ class WriterAgent:
                 rsi_val = s.get("rsi_14") or s.get("rsi_approx")
                 rsi_str = f"{rsi_val:.1f}" if isinstance(rsi_val, (int, float)) else "—"
                 sig_data.append([
-                    Paragraph(s.get("ticker", "").replace(".MC", ""), style_small),
-                    Paragraph(s.get("signal", ""), style_small),
+                    Paragraph(str(s.get("ticker") or "").replace(".MC", ""), style_small),
+                    Paragraph(str(s.get("signal") or ""), style_small),
                     Paragraph(rsi_str, style_small),
-                    Paragraph(s.get("comment", ""), style_small),
+                    Paragraph(str(s.get("comment") or ""), style_small),
                 ])
             row_bg_sig = []
             for i in range(1, len(sig_data)):

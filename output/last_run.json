@@ -5,11 +5,11 @@
   "qa_score": 92,
   "qa_recommendation": "approved",
   "qa_issues": [
-    "Sector_analysis contiene 11 sectores en lugar de 6 exactos (incluye duplicados: 'Transporte y distribución' aparece dos veces con datos ligeramente diferentes)",
-    "Campo 'validation_status' en JSON de análisis no debería estar presente (es responsabilidad del validador, no del analista)"
+    "sector_analysis contiene 10 bloques en lugar de exactamente 6 (incluye duplicados: 'Transporte y distribución' aparece 2 veces, 'Construcción', 'Mineral, metales y transformación', 'SOCIMI', 'Electrónica y software', 'Ocio, turismo y hostelería', 'Ingeniería y otros' son extras)",
+    "Algunos tickers en sector_analysis no pertenecen al IBEX 35 estándar o tienen información parcial (GRF.MC incluido sin validación completa en análisis previo)"
   ],
   "errors": [],
-  "elapsed_seconds": 53.4,
-  "timestamp": "2026-04-13T23:04:10.673140+02:00",
+  "elapsed_seconds": 36.2,
+  "timestamp": "2026-04-13T23:16:04.027561+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }

@@ -194,6 +194,7 @@ class AnalystAgent:
                     max_tokens=16000,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
+                    timeout=300.0,
                 )
                 stop_reason = response.stop_reason
                 content_len = len(response.content)

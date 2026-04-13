@@ -190,3 +190,32 @@
   Errores:   ninguno
 2026-04-13 23:04:10,673 [INFO] bolsa.leader: Estado guardado en output\last_run.json
 2026-04-13 23:04:10,674 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-13.pdf
+2026-04-13 23:15:25,416 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-13 23:15:27,320 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-13 23:15:27,322 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 23:15:27,322 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 23:15:27,788 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-13 ===
+2026-04-13 23:15:27,789 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-13 23:15:27,790 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-13 23:15:27,790 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 23:15:27,790 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-13 23:15:27,790 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-13 23:15:27,791 [INFO] bolsa.researcher: Datos de 2026-04-13 ya existen, omitiendo descarga.
+2026-04-13 23:15:27,791 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-13 23:15:27,791 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-13 23:15:28,218 [INFO] bolsa.analyst: Análisis de 2026-04-13 ya existe y está aprobado. Omitiendo LLM.
+2026-04-13 23:15:28,219 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-13 23:15:28,219 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-13 23:16:00,363 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-13.pdf (441 KB)
+2026-04-13 23:16:00,365 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-13.pdf
+2026-04-13 23:16:00,365 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-13 23:16:04,023 [INFO] bolsa.leader: [ QA ] Score: 92/100 — APPROVED
+2026-04-13 23:16:04,027 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-13
+  PDF:       output\informe_2026-04-13.pdf
+  QA Score:  92/100
+  Tiempo:    36s
+  Errores:   ninguno
+2026-04-13 23:16:04,028 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-13 23:16:04,028 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-13.pdf
