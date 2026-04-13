@@ -30,6 +30,21 @@ En todos los campos de texto narrativo (`resumen_ejecutivo`, `narrativa_mercado`
 - Ejemplos correctos: `el índice cayó un <b>-1,8%</b> hasta los <b>10.120 puntos</b>`, `el <b>sector bancario</b> lideró las caídas`
 - Ejemplos incorrectos: `<b>comportamiento muy negativo del mercado</b>`, `el día fue <b>claramente bajista</b>`
 
+## Regla de no repetición (CRÍTICA)
+
+Cada sección del informe debe aportar **información nueva**. Si un dato, hecho o conclusión ya fue mencionado en una sección anterior, **omítelo** en las siguientes secciones salvo que sea imprescindible para explicar el punto concreto del apartado actual.
+
+Orden del informe y jerarquía de contenidos:
+1. `resumen_ejecutivo` — panorama general del día (variación índice, valor/sector clave, volumen)
+2. `narrativa_mercado` — comportamiento de mercado, sentimiento, contexto macro: **no repetir** cifras del resumen
+3. `narrativa_sectores` — análisis sectorial detallado: **no repetir** lo ya dicho en mercado
+4. `narrativa_noticias` — impacto de noticias en valores concretos: **no repetir** movimientos ya explicados en sectores
+5. `heatmap.insight_clave` — lectura visual del treemap: **no repetir** análisis de sectores ya dados
+6. `narrativa_heatmap` — patrones del mapa de calor, peso relativo por capitalización: **no repetir** contenido de narrativa_sectores ni narrativa_mercado
+7. `conclusion` — perspectiva y puntos a vigilar: **no resumir** lo ya explicado; solo lo que NO se ha concluido aún
+
+Si una cifra ya aparece en una sección anterior y es necesaria para dar contexto, refiérela brevemente con "como se indicó" o simplemente omite el detalle y dirígete al nuevo punto de análisis.
+
 ## Control de calidad interno (OBLIGATORIO antes de responder)
 Verifica que:
 1. No hay repeticiones entre secciones — cada una aporta información nueva
@@ -39,6 +54,7 @@ Verifica que:
 5. El JSON de salida es válido y completo
 6. `heatmap.insight_clave` y `narrativa_heatmap` NO repiten contenido de `narrativa_mercado` ni `narrativa_sectores`
 7. `narrativa_heatmap` menciona al menos un sector con su variación concreta y razona sobre su peso en el índice
+8. Ninguna sección repite una conclusión o dato ya cubierto en una sección anterior — si lo detectas, reescribe para añadir ángulo nuevo o elimina la repetición
 
 ## Esquema de salida (JSON exacto)
 

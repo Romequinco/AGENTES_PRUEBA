@@ -249,10 +249,10 @@ class WriterAgent:
             sector_sizes = sector_caps.values.tolist()
             sector_names = sector_caps.index.tolist()
 
-            # ── Layout: treemap ocupa la parte superior, leyenda sectorial debajo ──
+            # ── Layout: treemap arriba, leyenda de colores + sectorial debajo ──
             fig = plt.figure(figsize=(14, 10), facecolor="white")
-            ax = fig.add_axes([0.01, 0.12, 0.98, 0.83])   # treemap
-            ax_leg = fig.add_axes([0.01, 0.0, 0.98, 0.11])  # leyenda sectorial
+            ax = fig.add_axes([0.01, 0.22, 0.98, 0.75])   # treemap
+            ax_leg = fig.add_axes([0.01, 0.0, 0.98, 0.21])  # leyenda inferior
             ax.set_facecolor("white")
             ax.axis("off")
             ax_leg.axis("off")
@@ -296,17 +296,18 @@ class WriterAgent:
                         facecolor=face, edgecolor="#ffffff", linewidth=0.5, zorder=2
                     ))
 
-                    # Ticker + variación dentro del bloque si cabe
-                    if tw > 2.2 and th > 1.6:
+                    # Ticker + variación dentro del bloque — fuente proporcional al tamaño
+                    if tw > 1.8 and th > 1.4:
                         ticker_short = str(t_row.get("ticker", "")).replace(".MC", "")
                         chg_str = f"{chg:+.1f}%"
-                        fsize = max(5.0, min(8.5, min(tw, th) * 0.75))
+                        # Escala proporcional: bloque grande → fuente grande, sin tope bajo
+                        fsize = max(3.5, min(18.0, min(tw, th) * 1.15))
                         txt_color = "#ffffff" if intensity > 0.35 else "#111111"
                         ax.text(tx + tw / 2, ty + th * 0.60, ticker_short,
                                 ha="center", va="center", fontsize=fsize,
                                 fontweight="bold", color=txt_color, zorder=4, clip_on=True)
                         ax.text(tx + tw / 2, ty + th * 0.28, chg_str,
-                                ha="center", va="center", fontsize=fsize * 0.82,
+                                ha="center", va="center", fontsize=fsize * 0.80,
                                 color=txt_color, zorder=4, clip_on=True)
 
                 # ── Etiqueta de sector — tamaño proporcional al bloque ──
@@ -333,19 +334,23 @@ class WriterAgent:
             ax.set_title(f"Mapa de calor IBEX 35 — {self.date}",
                          fontsize=12, fontweight="bold", color=COLORS["primary"], pad=6)
 
-            # ── Leyenda de escala cromática (esquina superior derecha del treemap) ──
+            # ── Leyenda de escala cromática — horizontal DEBAJO del treemap ──
             color_legend = [
                 (self._change_to_color(4.0),  ">+3%  subida fuerte"),
-                (self._change_to_color(1.5),  "+1-3% subida"),
-                (self._change_to_color(0.0),  "  0%  sin cambios"),
-                (self._change_to_color(-1.5), "-1-3% caída"),
+                (self._change_to_color(1.5),  "+1–3% subida"),
+                (self._change_to_color(0.0),  "~0%  sin cambios"),
+                (self._change_to_color(-1.5), "-1–3% caída"),
                 (self._change_to_color(-4.0), "<-3%  caída fuerte"),
             ]
             legend_patches = [mpatches.Patch(facecolor=c, label=l, edgecolor="#888888")
                               for c, l in color_legend]
-            ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
-                      framealpha=0.90, edgecolor="#aaaaaa", title="Variación diaria",
-                      title_fontsize=7)
+            leg = ax_leg.legend(
+                handles=legend_patches, loc="upper center",
+                ncol=len(color_legend), fontsize=9,
+                framealpha=0.90, edgecolor="#aaaaaa",
+                title="Variación diaria", title_fontsize=9,
+                bbox_to_anchor=(0.5, 1.0),
+            )
 
             # ── Leyenda inferior: sectores pequeños que no caben en el bloque ──
             if small_sectors:
@@ -354,8 +359,8 @@ class WriterAgent:
                 )
             else:
                 legend_text = "Tamaño proporcional a capitalización bursátil"
-            ax_leg.text(0.5, 0.6, legend_text, ha="center", va="center",
-                        fontsize=7.5, color="#333333",
+            ax_leg.text(0.5, 0.18, legend_text, ha="center", va="center",
+                        fontsize=10, color="#222222", fontweight="bold",
                         transform=ax_leg.transAxes)
 
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
@@ -657,7 +662,7 @@ class WriterAgent:
         if heatmap_meta.get("insight_clave"):
             story.append(SP)
             insight_data = [[
-                Paragraph("<b>Lectura clave</b>", style_small),
+                Paragraph("<b>Lectura clave</b>", style_small_white),
                 Paragraph(heatmap_meta["insight_clave"], style_small),
             ]]
             insight_tbl = Table(insight_data, colWidths=[3*cm, PAGE_W - 3*cm])
