@@ -4,27 +4,12 @@ import time
 import logging
 from datetime import datetime
 
-import pytz
 import pandas as pd
 import anthropic
-from dotenv import load_dotenv
 
-load_dotenv()
+from agents.utils import MADRID_TZ, strip_markdown_fence, load_instructions
+
 logger = logging.getLogger("bolsa.analyst")
-
-SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
-
-
-def _strip_markdown_fence(text: str) -> str:
-    """Extrae el contenido de un bloque ```json ... ``` o ``` ... ```."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = lines[1:]  # quitar línea de apertura (```json o ```)
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        return "\n".join(lines).strip()
-    return text
 
 
 class AnalystError(Exception):
@@ -41,13 +26,11 @@ class AnalystAgent:
         self.retry_delay = int(config.get("retry_delay", 5))
         self.raw_dir = config.get("data_raw_dir", "data/raw")
         self.analysis_dir = config.get("data_analysis_dir", "data/analysis")
-        self.madrid = pytz.timezone("Europe/Madrid")
+        self.madrid = MADRID_TZ
         self.system_prompt = self._load_instructions()
 
     def _load_instructions(self) -> str:
-        path = os.path.join(SKILLS_DIR, "analyst_instructions.md")
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+        return load_instructions("analyst_instructions.md")
 
     def run(self) -> dict:
         # Caché: si el análisis del día ya existe y está aprobado, no repetir llamada LLM
@@ -222,7 +205,7 @@ class AnalystAgent:
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                     continue
-                raw = _strip_markdown_fence(raw)
+                raw = strip_markdown_fence(raw)
                 logger.info(f"Analyst primeros 300 chars: {raw[:300]}")
                 return json.loads(raw)
             except json.JSONDecodeError as e:

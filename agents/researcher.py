@@ -15,6 +15,7 @@ import requests
 import yfinance as yf
 
 from agents.ibex_data import get_ibex35_components
+from agents.utils import MADRID_TZ
 
 logger = logging.getLogger("bolsa.researcher")
 
@@ -172,7 +173,7 @@ class ResearcherAgent:
         self.raw_dir = config.get("data_raw_dir", "data/raw")
         self.max_retries = int(config.get("max_retries", 3))
         self.retry_delay = int(config.get("retry_delay", 5))
-        self.madrid = pytz.timezone("Europe/Madrid")
+        self.madrid = MADRID_TZ
 
         if components is not None:
             self.components = components

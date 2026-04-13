@@ -4,29 +4,15 @@ import time
 import logging
 from datetime import datetime
 
-import pytz
 import anthropic
 
 from agents.researcher import ResearcherAgent, ResearcherError
 from agents.analyst import AnalystAgent, AnalystError
 from agents.writer import WriterAgent, WriterError
 from agents.ibex_data import get_ibex35_components
+from agents.utils import MADRID_TZ, strip_markdown_fence, load_instructions
 
 logger = logging.getLogger("bolsa.leader")
-
-SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
-
-
-def _strip_markdown_fence(text: str) -> str:
-    """Extrae el contenido de un bloque ```json ... ``` o ``` ... ```."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = lines[1:]  # quitar línea de apertura (```json o ```)
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        return "\n".join(lines).strip()
-    return text
 
 
 class PipelineError(Exception):
@@ -46,16 +32,14 @@ class LeaderAgent:
         self.retry_delay = int(config.get("retry_delay", 5))
         self.analysis_dir = config.get("data_analysis_dir", "data/analysis")
         self.output_dir = config.get("output_dir", "output")
-        self.madrid = pytz.timezone("Europe/Madrid")
+        self.madrid = MADRID_TZ
         self.system_prompt = self._load_instructions()
         if ext_logger:
             global logger
             logger = ext_logger.getChild("leader")
 
     def _load_instructions(self) -> str:
-        path = os.path.join(SKILLS_DIR, "leader_instructions.md")
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+        return load_instructions("leader_instructions.md")
 
     def run(self, date: str | None = None) -> dict:
         date = date or datetime.now(self.madrid).strftime("%Y-%m-%d")
@@ -177,7 +161,7 @@ class LeaderAgent:
                     messages=[{"role": "user", "content": prompt}],
                 )
                 raw = response.content[0].text.strip()
-                raw = _strip_markdown_fence(raw)
+                raw = strip_markdown_fence(raw)
                 return json.loads(raw)
             except json.JSONDecodeError as e:
                 last_error = str(e)
