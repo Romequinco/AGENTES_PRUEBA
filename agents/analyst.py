@@ -58,6 +58,7 @@ class AnalystAgent:
         prices_path = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
         news_path = os.path.join(self.raw_dir, f"ibex35_news_{self.date}.json")
         indicators_path = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
+        macro_path = os.path.join(self.raw_dir, f"macro_{self.date}.json")
 
         if not os.path.exists(prices_path):
             raise AnalystError(f"Fichero de precios no encontrado: {prices_path}")
@@ -74,12 +75,25 @@ class AnalystAgent:
             with open(indicators_path, encoding="utf-8") as f:
                 indicators = json.load(f)
 
-        return {"prices_df": df, "news": news, "indicators": indicators}
+        macro = {}
+        if os.path.exists(macro_path):
+            with open(macro_path, encoding="utf-8") as f:
+                macro = json.load(f)
+
+        calendar_path = os.path.join(self.raw_dir, f"calendar_{self.date}.json")
+        calendar = {}
+        if os.path.exists(calendar_path):
+            with open(calendar_path, encoding="utf-8") as f:
+                calendar = json.load(f)
+
+        return {"prices_df": df, "news": news, "indicators": indicators, "macro": macro, "calendar": calendar}
 
     def build_prompt(self, data: dict, correction_feedback: str = "") -> str:
         df = data["prices_df"]
         news = data["news"]
         indicators = data["indicators"]
+        macro = data.get("macro", {})
+        calendar = data.get("calendar", {})
 
         valid = df[df["error"].isna() | (df["error"] == "")].copy()
         valid["change_pct"] = pd.to_numeric(valid["change_pct"], errors="coerce")
@@ -116,18 +130,30 @@ class AnalystAgent:
             f"{valid[['ticker','name','sector','open','high','low','close','change_pct','volume']].to_string(index=False)}"
         )
 
-        # Resumen de indicadores técnicos (solo los más relevantes para no saturar el prompt)
+        # Resumen de indicadores técnicos + volumen anómalo + posición 52W + contribución
         tech_summary = self._build_tech_summary(indicators.get("tickers", {}), valid)
+        volume_alerts_summary = self._build_volume_alerts(indicators.get("tickers", {}))
+        range_summary = self._build_range_summary(indicators.get("tickers", {}))
+        attribution_summary = self._build_attribution_summary(indicators.get("tickers", {}), ibex_idx)
 
         news_items = news.get("news", [])[:25]
         news_text = json.dumps(news_items, ensure_ascii=False, indent=2)
 
+        # Contexto macro europeo
+        macro_text = self._build_macro_summary(macro)
+
+        calendar_text = self._build_calendar_summary(calendar)
         correction = f"\n\nNOTA DE CORRECCIÓN: {correction_feedback}\n" if correction_feedback else ""
 
         return (
             f"Analiza los datos del mercado español del {self.date}.\n\n"
+            f"=== CONTEXTO MACRO EUROPEO ===\n{macro_text}\n\n"
             f"=== DATOS DE PRECIOS Y MERCADO ===\n{prices_summary}\n\n"
+            f"=== ATRIBUCIÓN DE MOVIMIENTO DEL IBEX (contribución en puntos) ===\n{attribution_summary}\n\n"
             f"=== INDICADORES TÉCNICOS (RSI, MA, MACD, ATR, Bollinger) ===\n{tech_summary}\n\n"
+            f"=== ALERTAS DE VOLUMEN INUSUAL (ratio vs media 20 días) ===\n{volume_alerts_summary}\n\n"
+            f"=== POSICIÓN EN RANGO 52 SEMANAS ===\n{range_summary}\n\n"
+            f"=== CALENDARIO ECONÓMICO PRÓXIMOS 7 DÍAS ===\n{calendar_text}\n\n"
             f"=== NOTICIAS DEL DÍA ===\n{news_text}\n"
             f"{correction}"
             f"\nResponde ÚNICAMENTE con el JSON de análisis. Sin texto adicional ni bloques markdown."
@@ -183,6 +209,114 @@ class AnalystAgent:
             lines.append(" | ".join(parts))
 
         return "\n".join(lines) if lines else "Sin indicadores calculados"
+
+    def _build_macro_summary(self, macro: dict) -> str:
+        """Construye resumen del contexto macro europeo."""
+        if not macro or not macro.get("macro"):
+            return "Datos macro no disponibles"
+        lines = []
+        for ticker, d in macro["macro"].items():
+            name = d.get("name", ticker)
+            chg = d.get("change_pct")
+            close = d.get("close")
+            ytd = d.get("ytd_pct")
+            chg_str = f"{chg:+.2f}%" if chg is not None else "N/D"
+            ytd_str = f" (YTD: {ytd:+.2f}%)" if ytd is not None else ""
+            lines.append(f"{name}: {close} | {chg_str}{ytd_str}")
+        return "\n".join(lines) if lines else "Sin datos macro"
+
+    def _build_volume_alerts(self, indicators: dict) -> str:
+        """Lista acciones con volumen inusual (ratio >= 1.5x respecto a media 20 días)."""
+        if not indicators:
+            return "Sin datos de volumen"
+        alerts = []
+        for ticker, ind in indicators.items():
+            ratio = ind.get("volume_ratio")
+            signal = ind.get("volume_signal", "normal")
+            if ratio and ratio >= 1.5:
+                chg = ind.get("change_pct", 0) or 0
+                direction = "subida" if chg > 0 else ("bajada" if chg < 0 else "lateral")
+                alerts.append(
+                    f"{ticker.replace('.MC','')} — ratio={ratio}x ({signal}) | "
+                    f"cambio={chg:+.2f}% {direction} | avg20d={ind.get('avg_volume_20d', 'N/D')}"
+                )
+        if not alerts:
+            return "Ningún valor con volumen inusual (todos dentro de 1.5x media 20 días)"
+        return "\n".join(sorted(alerts, key=lambda x: float(x.split("ratio=")[1].split("x")[0]), reverse=True))
+
+    def _build_range_summary(self, indicators: dict) -> str:
+        """Muestra la posición de cada ticker en su rango de 52 semanas."""
+        if not indicators:
+            return "Sin datos de rango 52W"
+        near_high, near_low, low_range, mid_range = [], [], [], []
+        for ticker, ind in indicators.items():
+            pct = ind.get("range_52w_pct")
+            flag = ind.get("range_52w_flag")
+            if pct is None:
+                continue
+            short = ticker.replace(".MC", "")
+            entry = f"{short} ({pct:.1f}%)"
+            if flag == "near_high":
+                near_high.append(entry)
+            elif flag == "near_low":
+                near_low.append(entry)
+            elif flag == "low_range":
+                low_range.append(entry)
+            else:
+                mid_range.append(entry)
+        lines = []
+        if near_high:
+            lines.append(f"CERCA MÁXIMO ANUAL (>90%): {', '.join(near_high)}")
+        if near_low:
+            lines.append(f"CERCA MÍNIMO ANUAL (<10%): {', '.join(near_low)}")
+        if low_range:
+            lines.append(f"RANGO BAJO (10-30%): {', '.join(low_range)}")
+        if mid_range:
+            lines.append(f"RANGO MEDIO (30-90%): {', '.join(mid_range)}")
+        return "\n".join(lines) if lines else "Sin datos de rango 52W"
+
+    def _build_attribution_summary(self, indicators: dict, ibex_idx: dict) -> str:
+        """Muestra la contribución en puntos de cada acción al movimiento del IBEX."""
+        if not indicators or not ibex_idx.get("change_abs"):
+            return "Datos de atribución no disponibles"
+        contribs = []
+        for ticker, ind in indicators.items():
+            pts = ind.get("contribution_pts")
+            weight = ind.get("market_cap_weight_pct")
+            if pts is not None:
+                name = ind.get("name", ticker.replace(".MC", ""))
+                contribs.append((pts, ticker.replace(".MC", ""), name, weight or 0))
+        if not contribs:
+            return "Sin datos de contribución"
+        contribs.sort(key=lambda x: x[0], reverse=True)
+        ibex_total = ibex_idx.get("change_abs", 0)
+        lines = [f"Movimiento total IBEX: {ibex_total:+.2f} pts"]
+        lines.append("Top contribuyentes positivos:")
+        for pts, short, name, w in contribs[:5]:
+            if pts > 0:
+                lines.append(f"  {short} ({name}): {pts:+.2f} pts | peso {w:.1f}%")
+        lines.append("Top contribuyentes negativos:")
+        for pts, short, name, w in reversed(contribs[-5:]):
+            if pts < 0:
+                lines.append(f"  {short} ({name}): {pts:+.2f} pts | peso {w:.1f}%")
+        return "\n".join(lines)
+
+    def _build_calendar_summary(self, calendar: dict) -> str:
+        """Construye resumen del calendario económico para el prompt."""
+        if not calendar or not calendar.get("events"):
+            return "Calendario económico no disponible (configura FINNHUB_API_KEY para activarlo)"
+        events = calendar["events"]
+        lines = [f"Rango: {calendar.get('date_range', 'N/D')}"]
+        for e in events[:15]:
+            impact = e.get("impact", "").upper()
+            impact_marker = "🔴" if impact == "HIGH" else ("🟡" if impact == "MEDIUM" else "⚪")
+            actual = f" | Actual: {e['actual']}" if e.get("actual") is not None else ""
+            estimate = f" | Est: {e['estimate']}" if e.get("estimate") is not None else ""
+            lines.append(
+                f"{e.get('date','')} {impact_marker} [{e.get('country','')}] "
+                f"{e.get('event','')}{actual}{estimate}"
+            )
+        return "\n".join(lines)
 
     def analyze(self, data: dict) -> dict:
         last_error = ""

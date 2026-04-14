@@ -106,6 +106,7 @@ def _compute_indicators(hist: pd.DataFrame) -> dict:
     close = hist["Close"].dropna()
     high = hist["High"].dropna()
     low = hist["Low"].dropna()
+    volume = hist["Volume"].dropna()
 
     macd_data = _macd(close)
     bb = _bollinger(close)
@@ -140,6 +141,22 @@ def _compute_indicators(hist: pd.DataFrame) -> dict:
         else:
             rsi_signal = "neutral"
 
+    # Análisis de volumen: ratio vs media 20 días
+    avg_vol_20d = None
+    vol_ratio = None
+    vol_signal = "normal"
+    if len(volume) >= 21:
+        avg_vol_20d = int(volume.iloc[-21:-1].mean())  # últimos 20 días excluyendo hoy
+        today_vol = int(volume.iloc[-1]) if pd.notna(volume.iloc[-1]) else None
+        if today_vol and avg_vol_20d > 0:
+            vol_ratio = round(today_vol / avg_vol_20d, 2)
+            if vol_ratio >= 2.0:
+                vol_signal = "high"
+            elif vol_ratio >= 1.5:
+                vol_signal = "elevated"
+            elif vol_ratio <= 0.5:
+                vol_signal = "low"
+
     return {
         "rsi_14": rsi_val,
         "rsi_signal": rsi_signal,
@@ -155,6 +172,9 @@ def _compute_indicators(hist: pd.DataFrame) -> dict:
         "bollinger_middle": bb["middle"],
         "bollinger_lower": bb["lower"],
         "bollinger_bandwidth": bb["bandwidth"],
+        "avg_volume_20d": avg_vol_20d,
+        "volume_ratio": vol_ratio,
+        "volume_signal": vol_signal,
     }
 
 
@@ -197,13 +217,18 @@ class ResearcherAgent:
         prices_file = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
         indicators_file = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
         news_file = os.path.join(self.raw_dir, f"ibex35_news_{self.date}.json")
+        macro_file = os.path.join(self.raw_dir, f"macro_{self.date}.json")
 
-        if os.path.exists(prices_file) and os.path.exists(news_file) and os.path.exists(indicators_file):
+        calendar_file = os.path.join(self.raw_dir, f"calendar_{self.date}.json")
+        if (os.path.exists(prices_file) and os.path.exists(news_file)
+                and os.path.exists(indicators_file) and os.path.exists(macro_file)):
             logger.info(f"Datos de {self.date} ya existen, omitiendo descarga.")
             return {
                 "prices_file": prices_file,
                 "indicators_file": indicators_file,
                 "news_file": news_file,
+                "macro_file": macro_file,
+                "calendar_file": calendar_file if os.path.exists(calendar_file) else None,
                 "status": "ok",
                 "errors": [],
             }
@@ -225,11 +250,25 @@ class ResearcherAgent:
             errors.append(f"fetch_news: {e}")
             news_file = None
 
+        try:
+            macro_file = self.collect_macro_data()
+        except Exception as e:
+            errors.append(f"collect_macro_data: {e}")
+            macro_file = None
+
+        try:
+            calendar_file = self.collect_economic_calendar()
+        except Exception as e:
+            errors.append(f"collect_economic_calendar: {e}")
+            calendar_file = None
+
         status = "ok" if not errors else ("partial" if prices_file else "error")
         return {
             "prices_file": prices_file,
             "indicators_file": indicators_file,
             "news_file": news_file,
+            "macro_file": macro_file,
+            "calendar_file": calendar_file,
             "status": status,
             "errors": errors,
         }
@@ -260,6 +299,26 @@ class ResearcherAgent:
         prices_path = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
         df.to_csv(prices_path, index=False, encoding="utf-8")
         logger.info(f"Precios guardados en {prices_path}")
+
+        # Contribución en puntos al movimiento del IBEX (Bloque B)
+        ibex_prev = ibex_index.get("prev_close")
+        if ibex_prev and ibex_prev > 0:
+            total_mcap = sum(
+                r.get("market_cap") or 0 for r in rows
+                if r.get("market_cap") and pd.notna(r.get("market_cap"))
+            )
+            if total_mcap > 0:
+                for r in rows:
+                    ticker = r.get("ticker")
+                    mcap = r.get("market_cap")
+                    chg = r.get("change_pct")
+                    if ticker and mcap and pd.notna(mcap) and chg and pd.notna(chg):
+                        weight = mcap / total_mcap
+                        contrib = round((chg / 100) * weight * ibex_prev, 2)
+                        mcap_weight_pct = round(weight * 100, 2)
+                        if ticker in indicators:
+                            indicators[ticker]["contribution_pts"] = contrib
+                            indicators[ticker]["market_cap_weight_pct"] = mcap_weight_pct
 
         indicators_path = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
         indicators_data = {
@@ -345,6 +404,25 @@ class ResearcherAgent:
                 indicators["close"] = base["close"]
                 indicators["change_pct"] = base["change_pct"]
 
+                # Posición en rango 52 semanas
+                w52h = base.get("week_52_high")
+                w52l = base.get("week_52_low")
+                close_val = base.get("close")
+                if w52h and w52l and close_val and w52h > w52l:
+                    range_pct = round((close_val - w52l) / (w52h - w52l) * 100, 1)
+                    indicators["range_52w_pct"] = range_pct
+                    if range_pct >= 90:
+                        indicators["range_52w_flag"] = "near_high"
+                    elif range_pct <= 10:
+                        indicators["range_52w_flag"] = "near_low"
+                    elif range_pct <= 30:
+                        indicators["range_52w_flag"] = "low_range"
+                    else:
+                        indicators["range_52w_flag"] = "mid_range"
+                else:
+                    indicators["range_52w_pct"] = None
+                    indicators["range_52w_flag"] = None
+
                 return base, indicators
 
             except Exception as e:
@@ -355,6 +433,139 @@ class ResearcherAgent:
                     logger.warning(f"Ticker {ticker} fallido tras {self.max_retries} intentos: {e}")
 
         return base, None
+
+    def collect_macro_data(self) -> str:
+        """Recopila datos macro: índices europeos, divisas, materias primas y volatilidad."""
+        macro_file = os.path.join(self.raw_dir, f"macro_{self.date}.json")
+        if os.path.exists(macro_file):
+            logger.info(f"Datos macro de {self.date} ya existen.")
+            return macro_file
+
+        MACRO_TICKERS = {
+            "^GDAXI":    "DAX (Alemania)",
+            "^FCHI":     "CAC 40 (Francia)",
+            "^STOXX50E": "Euro Stoxx 50",
+            "^FTSE":     "FTSE 100 (Reino Unido)",
+            "EURUSD=X":  "EUR/USD",
+            "EURGBP=X":  "EUR/GBP",
+            "BZ=F":      "Brent Crude (USD/barril)",
+            "GC=F":      "Oro (USD/oz)",
+            "NG=F":      "Gas Natural (USD/MMBtu)",
+            "^VIX":      "VIX (Volatilidad implícita S&P500)",
+        }
+
+        macro_data = {}
+        for ticker, name in MACRO_TICKERS.items():
+            try:
+                t = yf.Ticker(ticker)
+                hist = t.history(period="5d", auto_adjust=True)
+                if hist.empty or len(hist) < 2:
+                    logger.warning(f"Macro {ticker}: sin datos suficientes")
+                    continue
+                today = hist.iloc[-1]
+                prev = hist.iloc[-2]
+                close = float(today["Close"])
+                prev_close = float(prev["Close"])
+                entry = {
+                    "name": name,
+                    "close": round(close, 4),
+                    "prev_close": round(prev_close, 4),
+                    "change_abs": round(close - prev_close, 4),
+                    "change_pct": round((close - prev_close) / prev_close * 100, 2),
+                    "ytd_pct": None,
+                }
+                # YTD
+                try:
+                    hist_ytd = t.history(period="ytd", auto_adjust=True)
+                    if not hist_ytd.empty and len(hist_ytd) >= 2:
+                        first = float(hist_ytd.iloc[0]["Close"])
+                        last = float(hist_ytd.iloc[-1]["Close"])
+                        entry["ytd_pct"] = round((last - first) / first * 100, 2)
+                except Exception:
+                    pass
+                macro_data[ticker] = entry
+            except Exception as e:
+                logger.warning(f"Macro ticker {ticker} fallido: {e}")
+
+        result = {
+            "date": self.date,
+            "fetch_timestamp": datetime.now(self.madrid).isoformat(),
+            "macro": macro_data,
+        }
+        os.makedirs(self.raw_dir, exist_ok=True)
+        with open(macro_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        logger.info(f"Datos macro guardados en {macro_file} ({len(macro_data)} indicadores)")
+        return macro_file
+
+    def collect_economic_calendar(self) -> str:
+        """Recopila el calendario económico de los próximos 5 días vía Finnhub API."""
+        cal_file = os.path.join(self.raw_dir, f"calendar_{self.date}.json")
+        if os.path.exists(cal_file):
+            logger.info(f"Calendario económico de {self.date} ya existe.")
+            return cal_file
+
+        api_key = (self.config.get("finnhub_api_key") or os.environ.get("FINNHUB_API_KEY") or "").strip()
+        if not api_key:
+            logger.warning("FINNHUB_API_KEY no configurada — calendario económico omitido")
+            return None
+
+        try:
+            from datetime import timedelta
+            date_from = self.date
+            date_to = (datetime.strptime(self.date, "%Y-%m-%d") + timedelta(days=7)).strftime("%Y-%m-%d")
+            url = (
+                f"https://finnhub.io/api/v1/calendar/economic"
+                f"?from={date_from}&to={date_to}&token={api_key}"
+            )
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Filtrar eventos relevantes para Europa/España
+            RELEVANT_COUNTRIES = {"EU", "ES", "DE", "FR", "GB", "US"}
+            RELEVANT_KEYWORDS = {
+                "cpi", "pmi", "gdp", "pib", "inflation", "inflacion", "interest rate",
+                "unemployment", "desempleo", "ecb", "bce", "fed", "central bank",
+                "retail sales", "industrial production", "trade balance",
+                "employment", "empleo", "deficit", "debt", "deuda",
+            }
+            events = data.get("economicCalendar", [])
+            filtered = []
+            for event in events:
+                country = (event.get("country") or "").upper()
+                name = (event.get("event") or "").lower()
+                impact = (event.get("impact") or "").lower()
+                if country in RELEVANT_COUNTRIES:
+                    name_match = any(kw in name for kw in RELEVANT_KEYWORDS)
+                    high_impact = impact in ("high", "medium")
+                    if name_match or high_impact:
+                        filtered.append({
+                            "date": event.get("time", "")[:10],
+                            "time": event.get("time", ""),
+                            "country": country,
+                            "event": event.get("event", ""),
+                            "impact": impact,
+                            "actual": event.get("actual"),
+                            "estimate": event.get("estimate"),
+                            "prev": event.get("prev"),
+                        })
+
+            result = {
+                "date": self.date,
+                "date_range": f"{date_from} → {date_to}",
+                "fetch_timestamp": datetime.now(self.madrid).isoformat(),
+                "events": filtered[:20],
+                "total_events_found": len(filtered),
+            }
+            os.makedirs(self.raw_dir, exist_ok=True)
+            with open(cal_file, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            logger.info(f"Calendario económico guardado: {cal_file} ({len(filtered)} eventos)")
+            return cal_file
+        except Exception as e:
+            logger.warning(f"Error obteniendo calendario económico: {e}")
+            return None
 
     def fetch_news(self) -> str:
         logger.info("Descargando noticias RSS")

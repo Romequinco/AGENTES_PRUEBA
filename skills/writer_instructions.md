@@ -37,11 +37,14 @@ Cada sección del informe debe aportar **información nueva**. Si un dato, hecho
 Orden del informe y jerarquía de contenidos:
 1. `resumen_ejecutivo` — panorama general del día (variación índice, valor/sector clave, volumen)
 2. `narrativa_mercado` — comportamiento de mercado, sentimiento, contexto macro: **no repetir** cifras del resumen
-3. `narrativa_sectores` — análisis sectorial detallado: **no repetir** lo ya dicho en mercado
-4. `narrativa_noticias` — impacto de noticias en valores concretos: **no repetir** movimientos ya explicados en sectores
-5. `heatmap.insight_clave` — lectura visual del treemap: **no repetir** análisis de sectores ya dados
-6. `narrativa_heatmap` — patrones del mapa de calor, peso relativo por capitalización: **no repetir** contenido de narrativa_sectores ni narrativa_mercado
-7. `conclusion` — perspectiva y puntos a vigilar: **no resumir** lo ya explicado; solo lo que NO se ha concluido aún
+3. `narrativa_macro` — contexto europeo y global: **no repetir** movimiento del IBEX ya explicado; centrarse en DAX/CAC/divisas/materias primas/VIX
+4. `narrativa_atribucion` — quién movió el IBEX: **no repetir** top gainers/losers ya dados; centrarse en peso y concentración
+5. `narrativa_volumen` — alertas de volumen inusual: solo si hay alertas; conectar volumen con precio y noticias
+6. `narrativa_sectores` — análisis sectorial detallado: **no repetir** lo ya dicho en mercado
+7. `narrativa_noticias` — impacto de noticias en valores concretos: **no repetir** movimientos ya explicados en sectores
+8. `heatmap.insight_clave` — lectura visual del treemap: **no repetir** análisis de sectores ya dados
+9. `narrativa_heatmap` — patrones del mapa de calor, peso relativo por capitalización: **no repetir** contenido de narrativa_sectores ni narrativa_mercado
+10. `conclusion` — perspectiva y puntos a vigilar: **no resumir** lo ya explicado; solo lo que NO se ha concluido aún
 
 Si una cifra ya aparece en una sección anterior y es necesaria para dar contexto, refiérela brevemente con "como se indicó" o simplemente omite el detalle y dirígete al nuevo punto de análisis.
 
@@ -55,6 +58,8 @@ Verifica que:
 6. `heatmap.insight_clave` y `narrativa_heatmap` NO repiten contenido de `narrativa_mercado` ni `narrativa_sectores`
 7. `narrativa_heatmap` menciona al menos un sector con su variación concreta y razona sobre su peso en el índice
 8. Ninguna sección repite una conclusión o dato ya cubierto en una sección anterior — si lo detectas, reescribe para añadir ángulo nuevo o elimina la repetición
+9. `narrativa_macro` usa datos de `macro_context` del análisis y compara IBEX con al menos 2 índices europeos
+10. `narrativa_volumen` es cadena vacía `""` si `volume_alerts` está vacío; si hay alertas, las menciona con su ratio concreto
 
 ## Esquema de salida (JSON exacto)
 
@@ -71,8 +76,12 @@ Verifica que:
   ],
   "resumen_ejecutivo": "<150-200 palabras: comienza con variación % e IBEX en puntos; luego principales movimientos y conclusión>",
   "narrativa_mercado": "<150-200 palabras: comportamiento del mercado, volumen, sentimiento y narrativa de sesión (risk-off/risk-on/etc.)>",
+  "narrativa_macro": "<100-150 palabras: qué hicieron DAX, CAC 40, Eurostoxx50 y FTSE ese día; impacto de EUR/USD; nivel de VIX; Brent y Oro. Cómo se comportó IBEX vs peers y qué divergencias hay>",
+  "narrativa_atribucion": "<80-100 palabras: qué acciones movieron más el IBEX en puntos hoy, su peso en el índice y la concentración del movimiento>",
+  "narrativa_volumen": "<60-100 palabras si hay alertas de volumen inusual, o cadena vacía si no hay ninguna alerta. Conectar volumen con precio y contexto noticioso>",
   "narrativa_sectores": "<150-200 palabras: análisis de los sectores más destacados del día con cifras concretas>",
   "narrativa_noticias": "<150-200 palabras: impacto de las noticias más relevantes en valores y sectores concretos>",
+  "narrativa_agenda": "<60-100 palabras sobre los eventos económicos clave de los próximos días y cómo podrían afectar al IBEX. Omitir si economic_calendar no está disponible o está vacío>",
   "heatmap": {
     "descripcion": "<1-2 frases: qué muestra el mapa de calor, cómo leerlo (tamaño = capitalización, color = variación)>",
     "leyenda": "<1 frase explicando la escala de colores: verde intenso subida fuerte, rojo intenso caída fuerte, gris sin cambios>",

@@ -99,6 +99,7 @@ def main():
         "ibex_cache_days": int(os.getenv("IBEX_CACHE_DAYS", "7")),
         "rss_expansion": os.getenv("RSS_EXPANSION", "https://www.expansion.com/rss/mercados.xml"),
         "rss_cinco_dias": os.getenv("RSS_CINCO_DIAS", "https://cincodias.elpais.com/seccion/rss/mercados/"),
+        "finnhub_api_key": (os.getenv("FINNHUB_API_KEY") or "").strip(),
     }
 
     # Verificación temprana: obtener composición del IBEX antes de arrancar el pipeline

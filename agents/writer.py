@@ -91,10 +91,10 @@ class WriterAgent:
     def run(self) -> dict:
         errors = []
         try:
-            analysis, prices_df = self.load_analysis()
+            analysis, prices_df, indicators = self.load_analysis()
             text = self.generate_text(analysis)
-            charts = self.generate_charts(prices_df, analysis)
-            pdf_path = self.build_pdf(text, charts, analysis, prices_df)
+            charts = self.generate_charts(prices_df, analysis, indicators)
+            pdf_path = self.build_pdf(text, charts, analysis, prices_df, indicators)
             return {"pdf_file": pdf_path, "status": "ok", "errors": errors}
         except WriterError as e:
             errors.append(str(e))
@@ -111,6 +111,7 @@ class WriterAgent:
     def load_analysis(self):
         analysis_path = os.path.join(self.analysis_dir, f"ibex35_analysis_{self.date}.json")
         prices_path = os.path.join(self.raw_dir, f"ibex35_prices_{self.date}.csv")
+        indicators_path = os.path.join(self.raw_dir, f"ibex35_indicators_{self.date}.json")
 
         if not os.path.exists(analysis_path):
             raise WriterError(f"Análisis no encontrado: {analysis_path}")
@@ -120,7 +121,11 @@ class WriterAgent:
         with open(analysis_path, encoding="utf-8") as f:
             analysis = json.load(f)
         df = pd.read_csv(prices_path, encoding="utf-8")
-        return analysis, df
+        indicators = {}
+        if os.path.exists(indicators_path):
+            with open(indicators_path, encoding="utf-8") as f:
+                indicators = json.load(f)
+        return analysis, df, indicators
 
     def generate_text(self, analysis: dict) -> dict:
         prompt = (
@@ -158,6 +163,9 @@ class WriterAgent:
             "titulares_candidatos": [],
             "resumen_ejecutivo": "Informe generado automáticamente. Consulte los datos adjuntos.",
             "narrativa_mercado": "Datos de mercado disponibles en la tabla adjunta.",
+            "narrativa_macro": "Contexto macro europeo disponible en los datos adjuntos.",
+            "narrativa_atribucion": "Atribución del movimiento disponible en el gráfico adjunto.",
+            "narrativa_volumen": "",
             "narrativa_sectores": "Análisis sectorial disponible en los gráficos adjuntos.",
             "narrativa_noticias": "Noticias del día disponibles en la sección correspondiente.",
             "heatmap": {
@@ -169,7 +177,7 @@ class WriterAgent:
             "conclusion": "Consulte los datos y gráficos para una visión completa del mercado.",
             "puntos_vigilancia": [],
             "calidad_datos": "limitados",
-            "disclaimer": "Este informe ha sido generado de forma automatizada con fines meramente informativos y no constituye asesoramiento financiero ni recomendación de inversión.",
+            "disclaimer": "Este informe ha sido generado de forma automatizada con fines meramente informativos y no constituye asesoramiento financiero ni recomendación de inversión. Las secciones 'Ideas a vigilar' no son recomendaciones de compra o venta.",
         }
 
     @staticmethod
@@ -188,7 +196,7 @@ class WriterAgent:
         except Exception:
             return None
 
-    def generate_charts(self, prices_df: pd.DataFrame, analysis: dict) -> dict:
+    def generate_charts(self, prices_df: pd.DataFrame, analysis: dict, indicators: dict = None) -> dict:
         os.makedirs(self.charts_dir, exist_ok=True)
         valid = prices_df[prices_df["error"].isna() | (prices_df["error"] == "")].copy()
         valid["change_pct"] = pd.to_numeric(valid["change_pct"], errors="coerce")
@@ -207,6 +215,26 @@ class WriterAgent:
 
         placeholder_volume = os.path.join(self.charts_dir, "volume_bar_placeholder.png")
         charts["volume_bar"] = self._chart_volume_bar(valid) or self._chart_placeholder(placeholder_volume, "volumen")
+
+        # Nuevos gráficos
+        if indicators:
+            placeholder_contrib = os.path.join(self.charts_dir, "contribution_placeholder.png")
+            charts["point_contribution"] = (
+                self._chart_point_contribution(indicators, analysis)
+                or self._chart_placeholder(placeholder_contrib, "atribución de movimiento")
+            )
+
+            placeholder_range = os.path.join(self.charts_dir, "range_placeholder.png")
+            charts["range_52w"] = (
+                self._chart_range_52w(indicators)
+                or self._chart_placeholder(placeholder_range, "rango 52 semanas")
+            )
+
+            placeholder_macro = os.path.join(self.charts_dir, "macro_placeholder.png")
+            charts["macro_comparison"] = (
+                self._chart_macro_comparison(analysis)
+                or self._chart_placeholder(placeholder_macro, "comparativa europea")
+            )
 
         return charts
 
@@ -497,7 +525,165 @@ class WriterAgent:
             path = None
         return path
 
-    def build_pdf(self, text: dict, charts: dict, analysis: dict, prices_df: pd.DataFrame) -> str:
+    def _chart_point_contribution(self, indicators: dict, analysis: dict) -> str:
+        """Gráfico de barras horizontales: contribución en puntos al movimiento del IBEX."""
+        path = os.path.join(self.charts_dir, "point_contribution.png")
+        try:
+            tickers_data = indicators.get("tickers", {})
+            contribs = []
+            for ticker, ind in tickers_data.items():
+                pts = ind.get("contribution_pts")
+                name = ind.get("name", ticker.replace(".MC", ""))
+                if pts is not None:
+                    contribs.append((pts, ticker.replace(".MC", ""), name))
+            if not contribs:
+                return None
+            contribs.sort(key=lambda x: x[0])
+
+            # Top 5 positivos + top 5 negativos
+            top_pos = [c for c in contribs if c[0] > 0][-5:]
+            top_neg = [c for c in contribs if c[0] < 0][:5]
+            display = top_neg + top_pos
+            if not display:
+                return None
+
+            labels = [f"{c[1]}" for c in display]
+            values = [c[0] for c in display]
+            bar_colors = [COLORS["green"] if v > 0 else COLORS["red"] for v in values]
+
+            fig, ax = plt.subplots(figsize=(10, 6), facecolor="white")
+            ax.set_facecolor("white")
+            bars = ax.barh(labels, values, color=bar_colors, edgecolor="none", height=0.5)
+            ax.axvline(0, color=COLORS["secondary"], linewidth=0.8, alpha=0.5)
+            x_range = max(abs(v) for v in values) if values else 1
+            offset = x_range * 0.02
+            for bar, val in zip(bars, values):
+                ax.text(val + (offset if val >= 0 else -offset),
+                        bar.get_y() + bar.get_height() / 2,
+                        f"{val:+.1f} pts", va="center",
+                        ha="left" if val >= 0 else "right",
+                        fontsize=8.5, color=COLORS["primary"], fontweight="bold")
+            ax.set_title(f"Atribución del movimiento del IBEX — {self.date}", fontsize=12,
+                         fontweight="bold", color=COLORS["primary"], pad=10)
+            ax.set_xlabel("Contribución en puntos al índice", fontsize=9, color=COLORS["text"])
+            for spine in ["top", "right", "left", "bottom"]:
+                ax.spines[spine].set_visible(False)
+            ax.tick_params(axis="both", which="both", length=0)
+            ax.grid(False)
+            plt.tight_layout()
+            fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+            plt.close(fig)
+        except Exception as e:
+            logger.warning(f"Error generando point_contribution: {e}")
+            path = None
+        return path
+
+    def _chart_range_52w(self, indicators: dict) -> str:
+        """Gráfico de barras horizontales mostrando posición de cada acción en su rango 52W."""
+        path = os.path.join(self.charts_dir, "range_52w.png")
+        try:
+            tickers_data = indicators.get("tickers", {})
+            entries = []
+            for ticker, ind in tickers_data.items():
+                pct = ind.get("range_52w_pct")
+                name = ind.get("name", ticker.replace(".MC", ""))
+                chg = ind.get("change_pct", 0) or 0
+                if pct is not None:
+                    short = ticker.replace(".MC", "")
+                    entries.append((pct, short, chg))
+            if not entries:
+                return None
+            entries.sort(key=lambda x: x[0])
+
+            labels = [e[1] for e in entries]
+            values = [e[0] for e in entries]
+            # Color por posición: rojo (cerca min) → naranja → verde (cerca max)
+            bar_colors = []
+            for v in values:
+                if v >= 80:
+                    bar_colors.append(COLORS["green"])
+                elif v >= 50:
+                    bar_colors.append("#2ecc71")
+                elif v >= 30:
+                    bar_colors.append("#f39c12")
+                else:
+                    bar_colors.append(COLORS["red"])
+
+            fig, ax = plt.subplots(figsize=(12, 9), facecolor="white")
+            ax.set_facecolor("white")
+            bars = ax.barh(labels, values, color=bar_colors, edgecolor="none", height=0.6)
+            ax.axvline(50, color=COLORS["border"], linewidth=0.8, linestyle="--", alpha=0.7)
+            for bar, val in zip(bars, values):
+                ax.text(min(val + 1, 98), bar.get_y() + bar.get_height() / 2,
+                        f"{val:.0f}%", va="center", ha="left",
+                        fontsize=7.5, color=COLORS["primary"])
+            ax.set_xlim(0, 105)
+            ax.set_title(f"Posición en rango 52 semanas — {self.date}", fontsize=12,
+                         fontweight="bold", color=COLORS["primary"], pad=10)
+            ax.set_xlabel("% del rango anual (0% = mínimo, 100% = máximo)", fontsize=8, color=COLORS["text"])
+            for spine in ["top", "right", "left", "bottom"]:
+                ax.spines[spine].set_visible(False)
+            ax.tick_params(axis="both", which="both", length=0)
+            ax.tick_params(axis="y", labelsize=8)
+            ax.grid(False)
+            plt.tight_layout()
+            fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+            plt.close(fig)
+        except Exception as e:
+            logger.warning(f"Error generando range_52w: {e}")
+            path = None
+        return path
+
+    def _chart_macro_comparison(self, analysis: dict) -> str:
+        """Tabla visual de comparativa de índices europeos y macro del día."""
+        path = os.path.join(self.charts_dir, "macro_comparison.png")
+        try:
+            macro_ctx = analysis.get("macro_context", {})
+            if not macro_ctx:
+                return None
+
+            # Extraer datos del texto de ibex_vs_europe — si el análisis tiene datos crudos
+            # Construimos una tabla simple con los datos disponibles en el JSON
+            rows = []
+            ibex_ms = analysis.get("market_summary", {})
+            ibex_chg = ibex_ms.get("ibex35_change_pct", 0) or 0
+            rows.append(("IBEX 35", ibex_chg, "España"))
+
+            # Buscamos datos macro en el contexto (puede que el analyst los incluya como texto)
+            ibex_vs = macro_ctx.get("ibex_vs_europe", "")
+            eur_usd = macro_ctx.get("eur_usd_impact", "")
+            vix = macro_ctx.get("vix_level", "")
+            commodities = macro_ctx.get("commodities_impact", "")
+
+            # Crear figura de texto informativo si no hay datos estructurados de índices
+            fig, ax = plt.subplots(figsize=(12, 5), facecolor="white")
+            ax.set_facecolor("#f8f9fa")
+            ax.axis("off")
+
+            texts = [
+                ("IBEX vs Europa", ibex_vs[:120] if ibex_vs else "Sin datos"),
+                ("EUR/USD", eur_usd[:120] if eur_usd else "Sin datos"),
+                ("VIX", vix[:120] if vix else "Sin datos"),
+                ("Materias primas", commodities[:120] if commodities else "Sin datos"),
+            ]
+            for i, (label, content) in enumerate(texts):
+                y = 0.82 - i * 0.22
+                ax.text(0.01, y, f"▌ {label}", transform=ax.transAxes,
+                        fontsize=10, fontweight="bold", color=COLORS["primary"], va="top")
+                ax.text(0.01, y - 0.06, content, transform=ax.transAxes,
+                        fontsize=8.5, color="#333333", va="top", wrap=True)
+
+            ax.set_title(f"Contexto Macro Europeo — {self.date}", fontsize=12,
+                         fontweight="bold", color=COLORS["primary"], pad=10,
+                         loc="left")
+            fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+            plt.close(fig)
+        except Exception as e:
+            logger.warning(f"Error generando macro_comparison: {e}")
+            path = None
+        return path
+
+    def build_pdf(self, text: dict, charts: dict, analysis: dict, prices_df: pd.DataFrame, indicators: dict = None) -> str:
         os.makedirs(self.output_dir, exist_ok=True)
         out_path = os.path.join(self.output_dir, f"informe_{self.date}.pdf")
 
@@ -723,6 +909,55 @@ class WriterAgent:
             story.append(Paragraph(narrativa_heatmap, style_normal))
 
         # ══════════════════════════════════════════════════════════════════
+        # Contexto Macro Europeo (Bloque A)
+        # ══════════════════════════════════════════════════════════════════
+        macro_ctx = analysis.get("macro_context", {})
+        if macro_ctx:
+            story.append(SP)
+            story.append(banner_h1("Contexto Macro Europeo"))
+            story.append(SP)
+            if text.get("narrativa_macro"):
+                story.append(Paragraph(text["narrativa_macro"], style_normal))
+                story.append(SP)
+            if charts.get("macro_comparison") and os.path.exists(charts["macro_comparison"]):
+                story.append(Image(charts["macro_comparison"], width=PAGE_W, height=6*cm))
+                story.append(Paragraph("Síntesis del contexto macroeconómico europeo del día", style_caption))
+            # Tabla compacta de señales divergentes
+            div_signals = macro_ctx.get("divergence_signals", [])
+            if div_signals:
+                story.append(SP)
+                div_data = [[Paragraph(f"⚡ {s}", style_small)] for s in div_signals]
+                div_tbl = Table(div_data, colWidths=[PAGE_W])
+                div_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), C_ACCENT),
+                    ("BOX", (0, 0), (-1, -1), 0.5, C_PRIMARY),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                    ("LINEBELOW", (0, 0), (-1, -2), 0.3, C_BORDER),
+                ]))
+                story.append(div_tbl)
+
+        # ══════════════════════════════════════════════════════════════════
+        # Atribución del movimiento (Bloque B)
+        # ══════════════════════════════════════════════════════════════════
+        movement = analysis.get("movement_attribution", {})
+        if movement:
+            story.append(SP)
+            story.append(banner_h1("Atribución del movimiento del IBEX"))
+            story.append(SP)
+            if text.get("narrativa_atribucion"):
+                story.append(Paragraph(text["narrativa_atribucion"], style_normal))
+                story.append(SP)
+            if charts.get("point_contribution") and os.path.exists(charts["point_contribution"]):
+                story.append(Image(charts["point_contribution"], width=PAGE_W, height=8*cm))
+                story.append(Paragraph(
+                    f"Contribución en puntos al movimiento del IBEX. "
+                    f"{movement.get('concentration', '')}",
+                    style_caption
+                ))
+
+        # ══════════════════════════════════════════════════════════════════
         # Datos completos IBEX 35
         # ══════════════════════════════════════════════════════════════════
         story.append(SP)
@@ -780,6 +1015,50 @@ class WriterAgent:
             ("RIGHTPADDING", (0, 0), (-1, -1), 5),
         ] + row_bg))
         story.append(tbl)
+
+        # ══════════════════════════════════════════════════════════════════
+        # Posición en rango 52 semanas (Bloque D)
+        # ══════════════════════════════════════════════════════════════════
+        story.append(SP)
+        story.append(banner_h1("Posición en rango 52 semanas"))
+        story.append(SP)
+        if charts.get("range_52w") and os.path.exists(charts["range_52w"]):
+            story.append(Image(charts["range_52w"], width=PAGE_W, height=11*cm))
+            story.append(Paragraph(
+                "Posición de cada valor dentro de su rango de 52 semanas. 0% = mínimo anual, 100% = máximo anual. "
+                "Verde: cerca de máximos | Naranja: zona media | Rojo: cerca de mínimos.",
+                style_caption
+            ))
+        range_ext = analysis.get("range_extremes", {})
+        near_high = range_ext.get("near_52w_high", [])
+        near_low = range_ext.get("near_52w_low", [])
+        if near_high or near_low:
+            story.append(SP)
+            ext_rows = []
+            if near_high:
+                for item in near_high:
+                    ext_rows.append([
+                        Paragraph(f'<font color="{COLORS["green"]}">▲</font> <b>Cerca máximo ({item.get("range_52w_pct", 0):.0f}%)</b>: {item.get("ticker", "").replace(".MC","")} — {item.get("name", "")}', style_small),
+                        Paragraph(item.get("comment", ""), style_small),
+                    ])
+            if near_low:
+                for item in near_low:
+                    ext_rows.append([
+                        Paragraph(f'<font color="{COLORS["red"]}">▼</font> <b>Cerca mínimo ({item.get("range_52w_pct", 0):.0f}%)</b>: {item.get("ticker", "").replace(".MC","")} — {item.get("name", "")}', style_small),
+                        Paragraph(item.get("comment", ""), style_small),
+                    ])
+            if ext_rows:
+                ext_tbl = Table(ext_rows, colWidths=[7*cm, PAGE_W - 7*cm])
+                ext_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), C_ACCENT_ALT),
+                    ("BOX", (0, 0), (-1, -1), 0.5, C_BORDER),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.3, C_BORDER),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]))
+                story.append(ext_tbl)
 
         # ══════════════════════════════════════════════════════════════════
         # Mejores y peores valores
@@ -891,6 +1170,49 @@ class WriterAgent:
             story.append(Image(charts["volume_bar"], width=PAGE_W, height=6.5*cm))
             story.append(Paragraph("Top 10 valores por volumen negociado", style_caption))
 
+        # Alertas de volumen inusual (Bloque C)
+        volume_alerts = analysis.get("volume_alerts", [])
+        if volume_alerts:
+            story.append(SP)
+            story.append(banner_h2("Alertas de volumen inusual"))
+            story.append(SP)
+            if text.get("narrativa_volumen"):
+                story.append(Paragraph(text["narrativa_volumen"], style_normal))
+                story.append(SP)
+            vol_header = [
+                Paragraph("Ticker", style_small_white),
+                Paragraph("Ratio vs media 20d", style_small_white),
+                Paragraph("Var% hoy", style_small_white),
+                Paragraph("Interpretación", style_small_white),
+            ]
+            vol_data = [vol_header]
+            for alert in volume_alerts:
+                chg = alert.get("change_pct", 0) or 0
+                chg_color = COLORS["green"] if chg >= 0 else COLORS["red"]
+                signal = alert.get("volume_signal", "elevated")
+                signal_color = COLORS["red"] if signal == "high" else "#e67e22"
+                vol_data.append([
+                    Paragraph(f'<b>{str(alert.get("ticker","")).replace(".MC","")}</b>', style_small),
+                    Paragraph(f'<font color="{signal_color}"><b>{alert.get("volume_ratio", 0):.1f}x</b></font> ({signal})', style_small),
+                    Paragraph(f'<font color="{chg_color}"><b>{chg:+.2f}%</b></font>', style_small),
+                    Paragraph(str(alert.get("interpretation", "")), style_small),
+                ])
+            row_bg_vol = []
+            for i in range(1, len(vol_data)):
+                bg = C_LIGHT_GRAY if i % 2 == 0 else C_WHITE
+                row_bg_vol.append(("BACKGROUND", (0, i), (-1, i), bg))
+            vol_tbl = Table(vol_data, colWidths=[2*cm, 3*cm, 2*cm, PAGE_W - 7*cm])
+            vol_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), C_PRIMARY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), C_WHITE),
+                ("GRID", (0, 0), (-1, -1), 0.4, C_BORDER),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ] + row_bg_vol))
+            story.append(vol_tbl)
+
         signals = analysis.get("technical_signals", [])
         if signals:
             story.append(SP)
@@ -929,6 +1251,240 @@ class WriterAgent:
                 ("RIGHTPADDING", (0, 0), (-1, -1), 5),
             ] + row_bg_sig))
             story.append(sig_tbl)
+
+        # ══════════════════════════════════════════════════════════════════
+        # Ideas a vigilar (Bloque H)
+        # ══════════════════════════════════════════════════════════════════
+        actionable = analysis.get("actionable_ideas", [])
+        if actionable:
+            story.append(SP)
+            story.append(banner_h1("Ideas a vigilar"))
+            story.append(SP)
+            # Disclaimer prominente
+            disclaimer_ideas = (
+                "<b>AVISO IMPORTANTE:</b> Las siguientes situaciones son análisis técnicos objetivos para seguimiento. "
+                "<b>No constituyen recomendaciones de inversión</b> ni asesoramiento financiero. "
+                "La inversión en bolsa conlleva riesgo de pérdida de capital."
+            )
+            disc_data = [[Paragraph(disclaimer_ideas, style_small)]]
+            disc_tbl = Table(disc_data, colWidths=[PAGE_W])
+            disc_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), hex_to_reportlab("#FFF3CD")),
+                ("BOX", (0, 0), (-1, -1), 1.0, hex_to_reportlab("#F0AD4E")),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ]))
+            story.append(disc_tbl)
+            story.append(SP)
+
+            TYPE_LABELS = {
+                "technical_rebound": "Rebote técnico",
+                "breakout": "Breakout",
+                "breakdown_watch": "Vigilar ruptura",
+                "fundamental_catalyst": "Catalizador fundamental",
+            }
+            for idea in actionable[:3]:
+                idea_type = idea.get("type", "")
+                type_label = TYPE_LABELS.get(idea_type, idea_type)
+                ticker_short = str(idea.get("ticker", "")).replace(".MC", "")
+                idea_rows = [
+                    [
+                        Paragraph(f'<b>{ticker_short}</b> — {idea.get("name", "")}', style_banner_h2),
+                        Paragraph(f'<i>{type_label}</i>', style_banner_h2),
+                    ],
+                    [
+                        Paragraph(f'<b>Tesis:</b> {idea.get("thesis", "")}', style_small),
+                        Paragraph(f'<b>Nivel clave:</b> {idea.get("key_level", "")}', style_small),
+                    ],
+                    [
+                        Paragraph(f'<b>Escenario de riesgo:</b> {idea.get("risk_scenario", "")}', style_small),
+                        Paragraph(f'<b>Horizonte temporal:</b> {idea.get("timeframe", "")}', style_small),
+                    ],
+                ]
+                idea_tbl = Table(idea_rows, colWidths=[PAGE_W * 0.6, PAGE_W * 0.4])
+                idea_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), C_SECONDARY),
+                    ("BACKGROUND", (0, 1), (-1, 1), C_ACCENT),
+                    ("BACKGROUND", (0, 2), (-1, 2), C_ACCENT_ALT),
+                    ("BOX", (0, 0), (-1, -1), 0.5, C_PRIMARY),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.3, C_BORDER),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("SPAN", (0, 0), (0, 0)),
+                ]))
+                story.append(idea_tbl)
+                story.append(Spacer(1, 0.2*cm))
+
+        # ══════════════════════════════════════════════════════════════════
+        # Tabla resumen completa — IBEX 35 de un vistazo (Bloque E)
+        # ══════════════════════════════════════════════════════════════════
+        if indicators:
+            tickers_ind = indicators.get("tickers", {})
+            if tickers_ind:
+                story.append(PageBreak())
+                story.append(banner_h1("IBEX 35 — Tabla resumen de un vistazo"))
+                story.append(SP)
+                caption_table = (
+                    "Todos los valores del IBEX 35. Color: verde = subida >+1%, rojo = bajada >−1%, gris = movimiento leve. "
+                    "Tendencia basada en señal MACD. Pos. 52W = posición en el rango anual."
+                )
+                story.append(Paragraph(caption_table, style_caption))
+                story.append(SP)
+
+                valid_sum = prices_df[prices_df["error"].isna() | (prices_df["error"] == "")].copy()
+                valid_sum["change_pct"] = pd.to_numeric(valid_sum["change_pct"], errors="coerce")
+                valid_sum = valid_sum.sort_values("change_pct", ascending=False)
+
+                sum_header = [
+                    Paragraph("Empresa", style_small_white),
+                    Paragraph("Ticker", style_small_white),
+                    Paragraph("Cierre", style_small_white),
+                    Paragraph("Var%", style_small_white),
+                    Paragraph("RSI", style_small_white),
+                    Paragraph("MA20", style_small_white),
+                    Paragraph("Vol ratio", style_small_white),
+                    Paragraph("Pos 52W%", style_small_white),
+                    Paragraph("Tend.", style_small_white),
+                ]
+                sum_data = [sum_header]
+                C_SUM_GREEN = hex_to_reportlab("#d5f5e3")
+                C_SUM_RED = hex_to_reportlab("#fdecea")
+
+                row_colors_sum = []
+                for idx, (_, row) in enumerate(valid_sum.iterrows(), start=1):
+                    ticker = str(row.get("ticker", ""))
+                    ind = tickers_ind.get(ticker, {})
+                    chg = row.get("change_pct", 0) or 0
+                    chg_color = COLORS["green"] if chg >= 0 else COLORS["red"]
+                    rsi = ind.get("rsi_14")
+                    rsi_str = f"{rsi:.0f}" if rsi is not None else "—"
+                    ma20 = ind.get("ma_20")
+                    close = row.get("close", 0) or 0
+                    ma20_signal = "▲" if (ma20 and close > ma20) else ("▼" if ma20 else "—")
+                    ma20_color = COLORS["green"] if ma20_signal == "▲" else COLORS["red"]
+                    vol_ratio = ind.get("volume_ratio")
+                    vol_str = f"{vol_ratio:.1f}x" if vol_ratio is not None else "—"
+                    vol_color = COLORS["red"] if (vol_ratio and vol_ratio >= 2.0) else (
+                        "#e67e22" if (vol_ratio and vol_ratio >= 1.5) else COLORS["text"]
+                    )
+                    range_pct = ind.get("range_52w_pct")
+                    range_str = f"{range_pct:.0f}%" if range_pct is not None else "—"
+                    macd_trend = ind.get("macd_trend", "")
+                    tend_icon = "▲" if macd_trend == "alcista" else ("▼" if macd_trend == "bajista" else "→")
+                    tend_color = COLORS["green"] if tend_icon == "▲" else (COLORS["red"] if tend_icon == "▼" else "#888888")
+
+                    sum_data.append([
+                        Paragraph(str(row.get("name") or "")[:20], style_small),
+                        Paragraph(ticker.replace(".MC", ""), style_small),
+                        Paragraph(f"{close:.2f}", style_small),
+                        Paragraph(f'<font color="{chg_color}"><b>{chg:+.2f}%</b></font>', style_small),
+                        Paragraph(rsi_str, style_small),
+                        Paragraph(f'<font color="{ma20_color}"><b>{ma20_signal}</b></font>', style_small),
+                        Paragraph(f'<font color="{vol_color}">{vol_str}</font>', style_small),
+                        Paragraph(range_str, style_small),
+                        Paragraph(f'<font color="{tend_color}"><b>{tend_icon}</b></font>', style_small),
+                    ])
+                    if chg > 1.0:
+                        row_colors_sum.append(("BACKGROUND", (0, idx), (-1, idx), C_SUM_GREEN))
+                    elif chg < -1.0:
+                        row_colors_sum.append(("BACKGROUND", (0, idx), (-1, idx), C_SUM_RED))
+                    else:
+                        row_colors_sum.append(("BACKGROUND", (0, idx), (-1, idx), C_LIGHT_GRAY if idx % 2 == 0 else C_WHITE))
+
+                col_w_sum = [4.0*cm, 1.6*cm, 1.6*cm, 1.6*cm, 1.2*cm, 1.4*cm, 1.8*cm, 1.8*cm, 1.4*cm]
+                sum_tbl = Table(sum_data, colWidths=col_w_sum, repeatRows=1)
+                sum_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), C_PRIMARY),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), C_WHITE),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 7),
+                    ("ALIGN", (2, 0), (-1, -1), "CENTER"),
+                    ("ALIGN", (0, 0), (1, -1), "LEFT"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.3, C_BORDER),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ] + row_colors_sum))
+                story.append(sum_tbl)
+                story.append(SP)
+                story.append(Paragraph(
+                    "Leyenda: Tend. ▲ = MACD alcista | ▼ = MACD bajista | → = neutro. "
+                    "Vol ratio = volumen hoy vs media 20 días. Pos 52W% = posición en rango anual.",
+                    style_caption
+                ))
+
+        # ══════════════════════════════════════════════════════════════════
+        # Agenda económica próximos días (Bloque F)
+        # ══════════════════════════════════════════════════════════════════
+        econ_cal = analysis.get("economic_calendar", {})
+        if econ_cal and econ_cal.get("events_next_7d"):
+            story.append(SP)
+            story.append(banner_h1("Agenda económica — próximos días"))
+            story.append(SP)
+            if econ_cal.get("key_event_this_week"):
+                key_event_data = [[
+                    Paragraph("<b>Evento clave</b>", style_small_white),
+                    Paragraph(econ_cal["key_event_this_week"], style_small),
+                ]]
+                ke_tbl = Table(key_event_data, colWidths=[3.5*cm, PAGE_W - 3.5*cm])
+                ke_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (0, 0), C_PRIMARY),
+                    ("BACKGROUND", (1, 0), (1, 0), C_ACCENT),
+                    ("BOX", (0, 0), (-1, -1), 0.5, C_PRIMARY),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.3, C_BORDER),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]))
+                story.append(ke_tbl)
+                story.append(SP)
+            if text.get("narrativa_agenda"):
+                story.append(Paragraph(text["narrativa_agenda"], style_normal))
+                story.append(SP)
+
+            IMPACT_COLORS = {"high": COLORS["red"], "medium": "#e67e22", "low": "#888888"}
+            cal_header = [
+                Paragraph("Fecha", style_small_white),
+                Paragraph("País", style_small_white),
+                Paragraph("Evento", style_small_white),
+                Paragraph("Relevancia", style_small_white),
+                Paragraph("Impacto para IBEX", style_small_white),
+            ]
+            cal_data = [cal_header]
+            for ev in econ_cal["events_next_7d"][:10]:
+                impact = ev.get("impact", "low")
+                impact_color = IMPACT_COLORS.get(impact, "#888888")
+                sectors_affected = ", ".join(ev.get("ibex_sectors_affected", []))
+                cal_data.append([
+                    Paragraph(str(ev.get("date", "")), style_small),
+                    Paragraph(str(ev.get("country", "")), style_small),
+                    Paragraph(str(ev.get("event", "")), style_small),
+                    Paragraph(f'<font color="{impact_color}"><b>{impact.upper()}</b></font>', style_small),
+                    Paragraph(str(ev.get("ibex_impact_note", "")), style_small),
+                ])
+            row_bg_cal = []
+            for i in range(1, len(cal_data)):
+                bg = C_LIGHT_GRAY if i % 2 == 0 else C_WHITE
+                row_bg_cal.append(("BACKGROUND", (0, i), (-1, i), bg))
+            cal_tbl = Table(cal_data, colWidths=[2.2*cm, 1.3*cm, 4.5*cm, 1.8*cm, PAGE_W - 9.8*cm])
+            cal_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), C_PRIMARY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), C_WHITE),
+                ("GRID", (0, 0), (-1, -1), 0.4, C_BORDER),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ] + row_bg_cal))
+            story.append(cal_tbl)
 
         # ══════════════════════════════════════════════════════════════════
         # Conclusión

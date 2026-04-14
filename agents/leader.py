@@ -180,22 +180,22 @@ class LeaderAgent:
         issues = []
         score = 0
 
-        # Campos obligatorios de primer nivel (20 pts)
+        # Campos obligatorios de primer nivel (15 pts)
         required_fields = ["market_summary", "top_gainers", "top_losers", "sector_analysis", "report_highlights"]
         missing = [f for f in required_fields if f not in analysis]
         if not missing:
-            score += 20
+            score += 15
         else:
             issues.append(f"Campos faltantes: {missing}")
 
-        # Cantidad de gainers/losers con subcampos mínimos (20 pts)
+        # Cantidad de gainers/losers con subcampos mínimos (15 pts)
         gainers = analysis.get("top_gainers", [])
         losers = analysis.get("top_losers", [])
         required_subfields = {"ticker", "name", "change_pct"}
         gainers_ok = len(gainers) >= 3 and all(required_subfields.issubset(g) for g in gainers)
         losers_ok = len(losers) >= 3 and all(required_subfields.issubset(l) for l in losers)
         if gainers_ok and losers_ok:
-            score += 20
+            score += 15
         else:
             issues.append(f"Gainers válidos: {len(gainers)}, Losers válidos: {len(losers)} (mínimo 3 con ticker/name/change_pct)")
 
@@ -207,19 +207,44 @@ class LeaderAgent:
         else:
             issues.append(f"Tickers repetidos entre gainers y losers: {gainer_tickers & loser_tickers}")
 
-        # Sectores (mínimo 4, no exactamente 6) (15 pts)
+        # Sectores (mínimo 4) (10 pts)
         sectors = analysis.get("sector_analysis", [])
         if len(sectors) >= 4:
-            score += 15
+            score += 10
         else:
             issues.append(f"Sectores insuficientes: {len(sectors)} (mínimo 4)")
 
-        # report_highlights no vacío (15 pts)
+        # report_highlights no vacío (10 pts)
         highlights = analysis.get("report_highlights", [])
         if isinstance(highlights, list) and len(highlights) > 0:
-            score += 15
+            score += 10
         else:
             issues.append("report_highlights vacío o ausente")
+
+        # Nuevas secciones de valor (20 pts = 5+5+5+5)
+        macro_ctx = analysis.get("macro_context", {})
+        if macro_ctx and macro_ctx.get("overall_interpretation"):
+            score += 5
+        else:
+            issues.append("macro_context ausente o sin overall_interpretation")
+
+        attribution = analysis.get("movement_attribution", {})
+        if attribution and attribution.get("top_positive_contributors"):
+            score += 5
+        else:
+            issues.append("movement_attribution ausente o sin contributors")
+
+        actionable = analysis.get("actionable_ideas", [])
+        if isinstance(actionable, list) and len(actionable) >= 1:
+            score += 5
+        else:
+            issues.append("actionable_ideas ausente o vacío")
+
+        range_ext = analysis.get("range_extremes", {})
+        if isinstance(range_ext, dict) and ("near_52w_high" in range_ext or "near_52w_low" in range_ext):
+            score += 5
+        else:
+            issues.append("range_extremes ausente")
 
         # Tamaño del PDF (20 pts)
         if pdf_size_kb > 100:
