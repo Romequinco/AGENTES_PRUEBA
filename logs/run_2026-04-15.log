@@ -77,3 +77,42 @@
   Errores:   ninguno
 2026-04-15 19:32:45,008 [INFO] bolsa.leader: Estado guardado en output\last_run.json
 2026-04-15 19:32:45,008 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-15.pdf
+2026-04-15 19:36:53,716 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-15 19:36:55,203 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-15 19:36:55,205 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-15 19:36:55,205 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-15 19:36:55,657 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-15 ===
+2026-04-15 19:36:55,657 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-15 19:36:55,658 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-15 19:36:55,658 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-15 19:36:55,658 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-15 19:36:55,658 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-15 19:36:55,659 [INFO] bolsa.researcher: Descargando precios e indicadores IBEX 35 para 2026-04-15 (35 tickers, 60d histórico)
+2026-04-15 19:37:15,925 [INFO] bolsa.researcher: Tickers con datos válidos: 35/35
+2026-04-15 19:37:15,933 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-15.csv
+2026-04-15 19:37:15,936 [INFO] bolsa.researcher: Indicadores guardados en data/raw\ibex35_indicators_2026-04-15.json (35 tickers)
+2026-04-15 19:37:15,936 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-15 19:37:16,556 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 48 noticias
+2026-04-15 19:37:28,299 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-15 19:37:28,301 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-15.json (48 items)
+2026-04-15 19:37:28,301 [INFO] bolsa.researcher: Datos macro de 2026-04-15 ya existen.
+2026-04-15 19:37:32,828 [INFO] bolsa.researcher: Calendario económico guardado: data/raw\calendar_2026-04-15.json (90 eventos)
+2026-04-15 19:37:32,829 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-15 19:37:32,829 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-15 19:37:33,237 [INFO] bolsa.analyst: Análisis de 2026-04-15 ya existe y está aprobado. Omitiendo LLM.
+2026-04-15 19:37:33,237 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-15 19:37:33,237 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-15 19:40:01,239 [WARNING] bolsa.writer: Writer: usando texto genérico de respaldo
+2026-04-15 19:40:03,657 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-15.pdf (629 KB)
+2026-04-15 19:40:03,661 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-15.pdf
+2026-04-15 19:40:03,661 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-15 19:40:05,656 [INFO] bolsa.leader: [ QA ] Score: 98/100 — APPROVED
+2026-04-15 19:40:05,659 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-15
+  PDF:       output\informe_2026-04-15.pdf
+  QA Score:  98/100
+  Tiempo:    190s
+  Errores:   ninguno
+2026-04-15 19:40:05,660 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-15 19:40:05,660 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-15.pdf

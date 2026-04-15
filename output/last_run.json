@@ -5,10 +5,10 @@
   "qa_score": 98,
   "qa_recommendation": "approved",
   "qa_issues": [
-    "range_extremes contiene listas vacías (near_52w_high y near_52w_low) — permitido si no hay extremos detectados, pero idealmente debería tener al menos 1-2 valores si el análisis es completo"
+    "range_extremes contiene listas vacías (near_52w_high y near_52w_low sin datos), aunque esto es permitido según criterios"
   ],
   "errors": [],
-  "elapsed_seconds": 151.5,
-  "timestamp": "2026-04-15T19:32:45.007306+02:00",
+  "elapsed_seconds": 190.0,
+  "timestamp": "2026-04-15T19:40:05.660125+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }
