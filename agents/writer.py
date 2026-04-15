@@ -290,9 +290,9 @@ class WriterAgent:
             sector_names = sector_caps.index.tolist()
 
             # ── Layout: treemap arriba, leyenda de colores + sectorial debajo ──
-            fig = plt.figure(figsize=(14, 10), facecolor="white")
-            ax = fig.add_axes([0.01, 0.22, 0.98, 0.75])   # treemap
-            ax_leg = fig.add_axes([0.01, 0.0, 0.98, 0.21])  # leyenda inferior
+            fig = plt.figure(figsize=(14, 11), facecolor="white")
+            ax = fig.add_axes([0.0, 0.20, 1.0, 0.78])    # treemap
+            ax_leg = fig.add_axes([0.0, 0.0, 1.0, 0.20])  # leyenda inferior
             ax.set_facecolor("white")
             ax.axis("off")
             ax_leg.axis("off")
@@ -386,10 +386,10 @@ class WriterAgent:
                               for c, l in color_legend]
             leg = ax_leg.legend(
                 handles=legend_patches, loc="upper center",
-                ncol=len(color_legend), fontsize=9,
+                ncol=len(color_legend), fontsize=12,
                 framealpha=0.90, edgecolor="#aaaaaa",
-                title="Variación diaria", title_fontsize=9,
-                bbox_to_anchor=(0.5, 1.0),
+                title="Variación diaria", title_fontsize=12,
+                bbox_to_anchor=(0.5, 1.02),
             )
 
             # ── Leyenda inferior: sectores pequeños que no caben en el bloque ──
@@ -399,8 +399,8 @@ class WriterAgent:
                 )
             else:
                 legend_text = "Tamaño proporcional a capitalización bursátil"
-            ax_leg.text(0.5, 0.18, legend_text, ha="center", va="center",
-                        fontsize=10, color="#222222", fontweight="bold",
+            ax_leg.text(0.5, 0.22, legend_text, ha="center", va="center",
+                        fontsize=12, color="#222222", fontweight="bold",
                         transform=ax_leg.transAxes)
 
             fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
@@ -609,7 +609,7 @@ class WriterAgent:
                 else:
                     bar_colors.append(COLORS["red"])
 
-            fig, ax = plt.subplots(figsize=(12, 9), facecolor="white")
+            fig, ax = plt.subplots(figsize=(12, max(9, len(entries) * 0.38)), facecolor="white")
             ax.set_facecolor("white")
             bars = ax.barh(labels, values, color=bar_colors, edgecolor="none", height=0.6)
             ax.axvline(50, color=COLORS["border"], linewidth=0.8, linestyle="--", alpha=0.7)
@@ -876,17 +876,14 @@ class WriterAgent:
 
         if charts.get("heatmap") and os.path.exists(charts["heatmap"]):
             story.append(Image(charts["heatmap"], width=PAGE_W, height=9*cm))
-            leyenda_text = heatmap_meta.get(
-                "leyenda",
-                "Verde intenso: >+3% | Verde suave: subida leve | Gris: sin cambios | Rojo suave: caída leve | Rojo intenso: <-3% — Tamaño proporcional a capitalización bursátil"
-            )
-            story.append(Paragraph(leyenda_text, style_caption))
 
-        if heatmap_meta.get("insight_clave"):
+        _insight = heatmap_meta.get("insight_clave", "")
+        _placeholder = "Consulte el mapa de calor adjunto"
+        if _insight and _placeholder not in _insight:
             story.append(SP)
             insight_data = [[
                 Paragraph("<b>Lectura clave</b>", style_small_white),
-                Paragraph(heatmap_meta["insight_clave"], style_small),
+                Paragraph(_insight, style_small),
             ]]
             insight_tbl = Table(insight_data, colWidths=[3*cm, PAGE_W - 3*cm])
             insight_tbl.setStyle(TableStyle([
@@ -919,9 +916,6 @@ class WriterAgent:
             if text.get("narrativa_macro"):
                 story.append(Paragraph(text["narrativa_macro"], style_normal))
                 story.append(SP)
-            if charts.get("macro_comparison") and os.path.exists(charts["macro_comparison"]):
-                story.append(Image(charts["macro_comparison"], width=PAGE_W, height=6*cm))
-                story.append(Paragraph("Síntesis del contexto macroeconómico europeo del día", style_caption))
             # Tabla compacta de señales divergentes
             div_signals = macro_ctx.get("divergence_signals", [])
             if div_signals:
@@ -1023,7 +1017,7 @@ class WriterAgent:
         story.append(banner_h1("Posición en rango 52 semanas"))
         story.append(SP)
         if charts.get("range_52w") and os.path.exists(charts["range_52w"]):
-            story.append(Image(charts["range_52w"], width=PAGE_W, height=11*cm))
+            story.append(Image(charts["range_52w"], width=PAGE_W, height=20*cm))
             story.append(Paragraph(
                 "Posición de cada valor dentro de su rango de 52 semanas. 0% = mínimo anual, 100% = máximo anual. "
                 "Verde: cerca de máximos | Naranja: zona media | Rojo: cerca de mínimos.",

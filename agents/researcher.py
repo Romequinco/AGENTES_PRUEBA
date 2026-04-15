@@ -397,6 +397,16 @@ class ResearcherAgent:
                 base["week_52_high"] = getattr(info, "fifty_two_week_high", None)
                 base["week_52_low"] = getattr(info, "fifty_two_week_low", None)
 
+                # Si fast_info no devuelve el rango 52W, calcularlo desde histórico anual
+                if base["week_52_high"] is None or base["week_52_low"] is None:
+                    try:
+                        hist_1y = t.history(period="1y", auto_adjust=True)
+                        if not hist_1y.empty and "Close" in hist_1y.columns:
+                            base["week_52_high"] = round(float(hist_1y["Close"].max()), 3)
+                            base["week_52_low"] = round(float(hist_1y["Close"].min()), 3)
+                    except Exception:
+                        pass
+
                 # Indicadores técnicos con todo el histórico
                 indicators = _compute_indicators(hist)
                 indicators["ticker"] = ticker
@@ -551,11 +561,17 @@ class ResearcherAgent:
                             "prev": event.get("prev"),
                         })
 
+            # Ordenar: primero eventos futuros (> fecha informe), luego los de hoy
+            filtered.sort(key=lambda e: e["date"])
+            future = [e for e in filtered if e["date"] > self.date]
+            today_events = [e for e in filtered if e["date"] == self.date]
+            ordered = future + today_events  # futuros primero
+
             result = {
                 "date": self.date,
                 "date_range": f"{date_from} → {date_to}",
                 "fetch_timestamp": datetime.now(self.madrid).isoformat(),
-                "events": filtered[:20],
+                "events": ordered[:30],
                 "total_events_found": len(filtered),
             }
             os.makedirs(self.raw_dir, exist_ok=True)

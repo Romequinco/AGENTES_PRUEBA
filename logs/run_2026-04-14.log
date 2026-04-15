@@ -1,0 +1,49 @@
+2026-04-14 09:24:10,164 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-14 09:24:12,089 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-14 09:24:12,097 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-14 09:24:12,097 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-14 09:24:12,582 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-14 ===
+2026-04-14 09:24:12,582 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-14 09:24:12,583 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-14 09:24:12,583 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-14 09:24:12,583 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-14 09:24:12,583 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-14 09:24:12,584 [INFO] bolsa.researcher: Descargando precios e indicadores IBEX 35 para 2026-04-14 (35 tickers, 60d histórico)
+2026-04-14 09:24:30,455 [INFO] bolsa.researcher: Tickers con datos válidos: 35/35
+2026-04-14 09:24:30,460 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-14.csv
+2026-04-14 09:24:30,463 [INFO] bolsa.researcher: Indicadores guardados en data/raw\ibex35_indicators_2026-04-14.json (35 tickers)
+2026-04-14 09:24:30,463 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-14 09:24:31,120 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 47 noticias
+2026-04-14 09:24:43,339 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-14 09:24:43,341 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-14.json (47 items)
+2026-04-14 09:24:46,107 [INFO] bolsa.researcher: Datos macro guardados en data/raw\macro_2026-04-14.json (10 indicadores)
+2026-04-14 09:24:47,068 [INFO] bolsa.researcher: Calendario económico guardado: data/raw\calendar_2026-04-14.json (100 eventos)
+2026-04-14 09:24:47,069 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-14 09:24:47,070 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-14 09:26:53,990 [INFO] bolsa.analyst: Analyst respuesta: stop_reason=end_turn, content_blocks=1, chars=43463
+2026-04-14 09:26:53,991 [INFO] bolsa.analyst: Analyst primeros 300 chars: {
+  "market_summary": {
+    "ibex35_performance": "alcista",
+    "ibex35_change_pct": 0.79,
+    "ibex35_close_pts": 18165.8,
+    "market_sentiment": "positivo",
+    "volatility_level": "moderada",
+    "volume_vs_average": "normal",
+    "summary_text": "El IBEX 35 cerró con ganancias del 0.79% (+142 
+2026-04-14 09:26:53,994 [INFO] bolsa.analyst: Análisis guardado en data/analysis\ibex35_analysis_2026-04-14.json
+2026-04-14 09:26:53,994 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-14 09:26:53,994 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-14 09:29:18,198 [WARNING] bolsa.writer: Writer: usando texto genérico de respaldo
+2026-04-14 09:29:20,242 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-14.pdf (572 KB)
+2026-04-14 09:29:20,245 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-14.pdf
+2026-04-14 09:29:20,245 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-14 09:29:22,457 [INFO] bolsa.leader: [ QA ] Score: 98/100 — APPROVED
+2026-04-14 09:29:22,460 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-14
+  PDF:       output\informe_2026-04-14.pdf
+  QA Score:  98/100
+  Tiempo:    310s
+  Errores:   ninguno
+2026-04-14 09:29:22,460 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-14 09:29:22,461 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-14.pdf

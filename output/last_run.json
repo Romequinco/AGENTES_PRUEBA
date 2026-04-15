@@ -1,15 +1,14 @@
 {
   "status": "success",
-  "date": "2026-04-13",
-  "pdf_path": "output\\informe_2026-04-13.pdf",
-  "qa_score": 92,
+  "date": "2026-04-15",
+  "pdf_path": "output\\informe_2026-04-15.pdf",
+  "qa_score": 98,
   "qa_recommendation": "approved",
   "qa_issues": [
-    "sector_analysis contiene 10 bloques en lugar de exactamente 6 (incluye duplicados: 'Transporte y distribución' aparece 2 veces, 'Construcción', 'Mineral, metales y transformación', 'SOCIMI', 'Electrónica y software', 'Ocio, turismo y hostelería', 'Ingeniería y otros' son extras)",
-    "Algunos tickers en sector_analysis no pertenecen al IBEX 35 estándar o tienen información parcial (GRF.MC incluido sin validación completa en análisis previo)"
+    "range_extremes contiene listas vacías (near_52w_high y near_52w_low) — permitido si no hay extremos detectados, pero idealmente debería tener al menos 1-2 valores si el análisis es completo"
   ],
   "errors": [],
-  "elapsed_seconds": 36.2,
-  "timestamp": "2026-04-13T23:16:04.027561+02:00",
+  "elapsed_seconds": 151.5,
+  "timestamp": "2026-04-15T19:32:45.007306+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }

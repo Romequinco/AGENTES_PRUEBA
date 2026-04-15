@@ -45,7 +45,28 @@ def check_market_hours() -> bool:
 
 
 def get_last_market_date() -> str | None:
-    """Devuelve la fecha del último día de mercado como 'YYYY-MM-DD', o None si no hay datos."""
+    """Devuelve la fecha del último día de mercado como 'YYYY-MM-DD', o None si no hay datos.
+
+    Lógica:
+    - Si hoy es día laborable y son ≥17:30 Madrid, asumimos que el mercado ya cerró hoy
+      y devolvemos la fecha de hoy directamente, sin esperar a que yfinance actualice sus datos
+      (yfinance puede tardar 30-60 min tras el cierre en reflejar el OHLCV del día).
+    - En cualquier otro caso (festivo, fin de semana, antes del cierre) usamos el último
+      dato disponible en yfinance como referencia.
+    """
+    madrid = pytz.timezone("Europe/Madrid")
+    now = datetime.now(madrid)
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Si es día laborable (lun–vie) y el mercado ya cerró (≥17:30), usar fecha de hoy
+    market_closed_today = (
+        now.weekday() < 5  # lunes=0 … viernes=4
+        and (now.hour > 17 or (now.hour == 17 and now.minute >= 30))
+    )
+    if market_closed_today:
+        return today_str
+
+    # Fuera de ese caso: usar el último dato de yfinance (cubre festivos y fines de semana)
     try:
         data = yf.download("^IBEX", period="5d", progress=False, auto_adjust=True)
         if data.empty:
