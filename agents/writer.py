@@ -144,6 +144,106 @@ class WriterAgent:
                 macro_data = json.load(f)
         return analysis, df, indicators, macro_data
 
+    def _ensure_required_text_fields(self, text: dict, analysis: dict) -> dict:
+        """Garantiza que los campos críticos nunca estén ausentes ni sean placeholders."""
+        BAD = ["datos disponibles", "consulte", "adjunt", "ver tabla"]
+
+        def _is_bad(v):
+            if not v:
+                return True
+            if isinstance(v, str):
+                return any(b in v.lower() for b in BAD)
+            return False
+
+        ms = analysis.get("market_summary", {})
+        chg = ms.get("ibex35_change_pct", 0) or 0
+        pts = ms.get("ibex35_close_pts", 0) or 0
+        verb = "avanzó" if chg >= 0 else "retrocedió"
+        sentiment = ms.get("market_sentiment", "neutral")
+
+        # conclusion — campo más crítico, aparece al final del JSON y suele truncarse
+        conclusion = text.get("conclusion", "")
+        if _is_bad(conclusion) or len(conclusion.split()) < 50:
+            macro = analysis.get("macro_context", {})
+            attr = analysis.get("movement_attribution", {})
+            concentration = attr.get("concentration", "")
+            ibex_vs_eu = macro.get("ibex_vs_europe", "")
+            ts = analysis.get("technical_signals", [])
+            soporte = next((s.get("level_to_watch", "") for s in ts if "soport" in s.get("level_to_watch", "").lower()), "")
+            ideas = analysis.get("ideas_vigilar", analysis.get("actionable_ideas", []))
+            idea_ticker = ideas[0].get("ticker", "") if ideas else ""
+
+            conclusion_parts = [
+                f"La sesión del IBEX 35 del {self.date} registró una variación del {chg:+.2f}% hasta los {pts:,.0f} puntos, con tono {sentiment}.",
+            ]
+            if ibex_vs_eu:
+                conclusion_parts.append(ibex_vs_eu[:150] + ("..." if len(ibex_vs_eu) > 150 else ""))
+            if concentration:
+                conclusion_parts.append(f"En términos de atribución, {concentration}.")
+            if soporte:
+                conclusion_parts.append(f"Nivel a vigilar: {soporte}.")
+            elif ts:
+                lvl = ts[0].get("level_to_watch", "")
+                if lvl:
+                    conclusion_parts.append(f"Nivel técnico relevante en {ts[0].get('ticker','')}: {lvl}.")
+            if idea_ticker:
+                conclusion_parts.append(f"De cara a próximas sesiones, {idea_ticker} presenta un setup técnico a seguir según el análisis del día.")
+
+            text["conclusion"] = " ".join(conclusion_parts)
+            logger.warning("Writer: campo 'conclusion' reconstruido desde datos del análisis")
+
+        # resumen_ejecutivo
+        resumen = text.get("resumen_ejecutivo", "")
+        if _is_bad(resumen):
+            top_g = analysis.get("top_gainers", [{}])
+            top_l = analysis.get("top_losers", [{}])
+            best = top_g[0].get("ticker", "").replace(".MC", "") if top_g else ""
+            worst = top_l[0].get("ticker", "").replace(".MC", "") if top_l else ""
+            text["resumen_ejecutivo"] = (
+                f"El IBEX 35 {verb} un {abs(chg):.2f}% hasta los {pts:,.0f} puntos durante la sesión del {self.date}. "
+                f"El mercado mostró un tono {sentiment}. "
+                + (f"{best} lideró las subidas mientras que {worst} encabezó las caídas. " if best and worst else "")
+                + "Los datos detallados se recogen en las secciones siguientes del informe."
+            )
+            logger.warning("Writer: campo 'resumen_ejecutivo' reconstruido")
+
+        # puntos_clave
+        puntos = text.get("puntos_clave", [])
+        if not puntos or (len(puntos) == 1 and _is_bad(puntos[0])):
+            gainers = analysis.get("top_gainers", [])
+            losers = analysis.get("top_losers", [])
+            bullets = []
+            if gainers:
+                g = gainers[0]
+                bullets.append(f"• {g.get('ticker','').replace('.MC','')} {g.get('name','')} +{g.get('change_pct',0):.2f}%: mejor valor de la sesión.")
+            if losers:
+                l = losers[0]
+                bullets.append(f"• {l.get('ticker','').replace('.MC','')} {l.get('name','')} {l.get('change_pct',0):.2f}%: peor valor de la sesión.")
+            sectors = analysis.get("sector_analysis", [])
+            if sectors:
+                best_s = max(sectors, key=lambda s: s.get("avg_change_pct", 0))
+                worst_s = min(sectors, key=lambda s: s.get("avg_change_pct", 0))
+                bullets.append(f"• Sector {best_s.get('sector','')}: mejor comportamiento relativo ({best_s.get('avg_change_pct',0):+.2f}%).")
+                bullets.append(f"• Sector {worst_s.get('sector','')}: peor comportamiento relativo ({worst_s.get('avg_change_pct',0):+.2f}%).")
+            text["puntos_clave"] = bullets if bullets else ["• Sesión registrada. Ver datos completos en la tabla del informe."]
+            logger.warning("Writer: campo 'puntos_clave' reconstruido")
+
+        # heatmap subkeys
+        hm = text.get("heatmap", {})
+        if not isinstance(hm, dict):
+            text["heatmap"] = {"descripcion": "", "leyenda": "", "insight_clave": ""}
+
+        # disclaimer siempre presente
+        if not text.get("disclaimer"):
+            text["disclaimer"] = (
+                "Este informe ha sido generado de forma automatizada con fines meramente informativos "
+                "y no constituye asesoramiento financiero ni recomendación de inversión. "
+                "Las secciones de ideas son análisis técnicos objetivos para seguimiento, "
+                "no constituyen consejo de inversión."
+            )
+
+        return text
+
     def generate_text(self, analysis: dict) -> dict:
         prompt = (
             f"Genera los textos narrativos para el informe del IBEX 35 del {self.date}.\n\n"
@@ -156,14 +256,16 @@ class WriterAgent:
             try:
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=3000,
+                    max_tokens=4096,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                     timeout=300.0,
                 )
                 raw = response.content[0].text.strip()
                 raw = strip_markdown_fence(raw)
-                return json.loads(raw)
+                result = json.loads(raw)
+                result = self._ensure_required_text_fields(result, analysis)
+                return result
             except json.JSONDecodeError as e:
                 last_error = str(e)
                 if attempt < self.max_retries - 1:
@@ -210,6 +312,146 @@ class WriterAgent:
         except Exception:
             return None
 
+    def _chart_ibex52w(self) -> str:
+        """Gráfico de velas del IBEX 35 en las últimas 52 semanas.
+        Velas alcistas en azul (#2c5282), bajistas en negro (#1a2332).
+        """
+        path = os.path.join(self.charts_dir, "ibex52w.png")
+        try:
+            import yfinance as yf
+
+            df = yf.download("^IBEX", period="1y", interval="1d", progress=False, auto_adjust=True)
+            if df is None or len(df) < 20:
+                logger.warning("_chart_ibex52w: datos insuficientes de yfinance")
+                return None
+
+            # Aplanar MultiIndex si existe
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+
+            df = df[["Open", "High", "Low", "Close"]].dropna()
+            df.index = pd.to_datetime(df.index)
+
+            # ── Subsampling: max 260 velas para legibilidad ──
+            if len(df) > 260:
+                df = df.iloc[-260:]
+
+            n = len(df)
+            xs = np.arange(n)
+
+            opens  = df["Open"].values
+            highs  = df["High"].values
+            lows   = df["Low"].values
+            closes = df["Close"].values
+
+            up_mask   = closes >= opens
+            down_mask = ~up_mask
+
+            C_UP   = "#2c5282"   # azul institucional
+            C_DOWN = "#1a2332"   # negro (primario del informe)
+            C_BG   = "white"
+            C_GRID = "#e2e8f0"
+
+            fig, ax = plt.subplots(figsize=(14, 4.2), facecolor=C_BG)
+            ax.set_facecolor(C_BG)
+
+            body_w = 0.55
+
+            # Mechas
+            ax.vlines(xs[up_mask],   lows[up_mask],   highs[up_mask],   color=C_UP,   linewidth=0.8)
+            ax.vlines(xs[down_mask], lows[down_mask], highs[down_mask], color=C_DOWN, linewidth=0.8)
+
+            # Cuerpos alcistas
+            bodies_up = [
+                mpatches.Rectangle(
+                    (x - body_w / 2, min(o, c)),
+                    body_w, abs(c - o) or 0.1,
+                    facecolor=C_UP, edgecolor=C_UP, linewidth=0.5
+                )
+                for x, o, c in zip(xs[up_mask], opens[up_mask], closes[up_mask])
+            ]
+            for p in bodies_up:
+                ax.add_patch(p)
+
+            # Cuerpos bajistas
+            bodies_down = [
+                mpatches.Rectangle(
+                    (x - body_w / 2, min(o, c)),
+                    body_w, abs(c - o) or 0.1,
+                    facecolor=C_DOWN, edgecolor=C_DOWN, linewidth=0.5
+                )
+                for x, o, c in zip(xs[down_mask], opens[down_mask], closes[down_mask])
+            ]
+            for p in bodies_down:
+                ax.add_patch(p)
+
+            # Media móvil 50 sesiones (línea de referencia discreta)
+            ma50 = pd.Series(closes).rolling(50, min_periods=10).mean().values
+            ax.plot(xs, ma50, color="#95a5a6", linewidth=1.0, linestyle="--",
+                    label="MA50", zorder=2)
+
+            # ── Eje X: etiquetas de mes ──
+            tick_positions = []
+            tick_labels    = []
+            seen_months    = set()
+            MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                         "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+            for i, dt in enumerate(df.index):
+                key = (dt.year, dt.month)
+                if key not in seen_months:
+                    seen_months.add(key)
+                    tick_positions.append(i)
+                    tick_labels.append(f"{MONTHS_ES[dt.month - 1]} {str(dt.year)[2:]}")
+            ax.set_xticks(tick_positions)
+            ax.set_xticklabels(tick_labels, fontsize=7.5, color=COLORS["text_secondary"])
+
+            # ── Eje Y ──
+            ax.yaxis.set_major_formatter(
+                matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}")
+            )
+            ax.tick_params(axis="y", labelsize=7.5, colors=COLORS["text_secondary"], length=0)
+            ax.tick_params(axis="x", length=0)
+
+            # Grid horizontal sutil
+            ax.yaxis.grid(True, color=C_GRID, linewidth=0.6, zorder=0)
+            ax.set_axisbelow(True)
+            ax.xaxis.grid(False)
+
+            # Spines
+            for spine in ["top", "right", "left"]:
+                ax.spines[spine].set_visible(False)
+            ax.spines["bottom"].set_color(C_GRID)
+
+            # Título
+            last_close = closes[-1]
+            last_date  = df.index[-1].strftime("%d/%m/%Y")
+            ax.set_title(
+                f"IBEX 35 — Últimas 52 semanas   |   Cierre {last_date}: {last_close:,.0f} pts",
+                fontsize=9, fontweight="bold",
+                color=COLORS["primary"], loc="left", pad=8
+            )
+
+            # Leyenda discreta
+            legend_elements = [
+                mpatches.Patch(facecolor=C_UP,   label="Alcista"),
+                mpatches.Patch(facecolor=C_DOWN, label="Bajista"),
+                plt.Line2D([0], [0], color="#95a5a6", linewidth=1.0,
+                           linestyle="--", label="MA 50"),
+            ]
+            ax.legend(handles=legend_elements, fontsize=7, loc="upper left",
+                      frameon=False, ncol=3,
+                      labelcolor=COLORS["text_secondary"])
+
+            ax.set_xlim(-1, n)
+            plt.tight_layout(pad=0.5)
+            fig.savefig(path, dpi=150, bbox_inches="tight", facecolor=C_BG)
+            plt.close(fig)
+            logger.info(f"Gráfico IBEX 52W generado: {path}")
+            return path
+        except Exception as e:
+            logger.warning(f"Error generando ibex52w: {e}")
+            return None
+
     def generate_charts(self, prices_df: pd.DataFrame, analysis: dict, indicators: dict = None) -> dict:
         os.makedirs(self.charts_dir, exist_ok=True)
         valid = prices_df[prices_df["error"].isna() | (prices_df["error"] == "")].copy()
@@ -230,6 +472,8 @@ class WriterAgent:
                 self._chart_point_contribution(indicators, analysis)
                 or self._chart_placeholder(placeholder_contrib, "atribución de movimiento")
             )
+
+        charts["ibex52w"] = self._chart_ibex52w()
 
         return charts
 
@@ -913,6 +1157,12 @@ class WriterAgent:
         story.append(macro_tbl)
         story.append(SP)
 
+        # ── Gráfico IBEX 52 semanas ────────────────────────────────────
+        ibex52w_path = charts.get("ibex52w")
+        if ibex52w_path and os.path.exists(ibex52w_path):
+            story.append(Image(ibex52w_path, width=PAGE_W, height=5.2*cm))
+            story.append(SP)
+
         # ── Resumen ejecutivo ──────────────────────────────────────────
         story.append(banner_h2("Resumen Ejecutivo"))
         story.append(SP)
@@ -968,10 +1218,6 @@ class WriterAgent:
         if _insight and not any(b in _insight.lower() for b in _bad):
             story.append(SP)
             story.append(Paragraph(_insight, style_small))
-
-        heatmap_leyenda = heatmap_meta.get("leyenda", "")
-        if heatmap_leyenda:
-            story.append(Paragraph(heatmap_leyenda, style_caption))
 
         story.append(SP)
         story.append(banner_h2("Contexto Macro Europeo"))

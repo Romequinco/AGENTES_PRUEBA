@@ -68,23 +68,24 @@ NUNCA generes en ningún campo:
 {
   "titulo_informe": "IBEX 35 — Informe Diario — <DD de Mes de YYYY>",
   "titular_portada": "<máx 12 palabras — el hecho más relevante del día>",
+  "conclusion": "<80-100 palabras. NUNCA vacía. Estructura: tono general de sesión (1 frase) + factor dominante a vigilar (1-2 frases) + niveles técnicos IBEX soporte y resistencia concretos (1 frase) + escenario base próxima sesión (1-2 frases).>",
   "resumen_ejecutivo": "<100-120 palabras. OBLIGATORIO empezar: 'El IBEX 35 [verbo] un X,XX% hasta los XX.XXX puntos, [causa].' Incluir sector/valor más relevante y 1 dato macro. Funciona como standalone. NO repetir datos de la cabecera macro.>",
   "puntos_clave": [
     "<3-5 bullets. Formato exacto: '• [TICKER o SECTOR] [qué ocurrió] [dato numérico]: [por qué importa]'. Máx 2 líneas cada uno. Hechos complementarios NO cubiertos en el resumen.>"
   ],
+  "analisis_sectorial_texto": "<80-100 palabras: mejor sector con motivo (POR QUÉ, no QUÉ), peor sector con motivo, 1 divergencia notable si existe. No repetir el QUÉ ya visible en los gráficos.>",
+  "atribucion_concentracion": "<1-2 frases: qué % del movimiento concentran los 3 mayores contribuyentes y quiénes son. Usar datos de movement_attribution.>",
   "contexto_macro_europeo": [
     {
       "comparacion": "<p.ej. 'IBEX -0,55% vs DAX +0,09%'>",
       "interpretacion": "<máx 20 palabras — insight que conecta España con Europa>"
     }
   ],
-  "atribucion_concentracion": "<1-2 frases: qué % del movimiento concentran los 3 mayores contribuyentes y quiénes son. Usar datos de movement_attribution.>",
   "heatmap": {
     "descripcion": "<1-2 frases: qué muestra el mapa (cada bloque = empresa, tamaño = capitalización, color = variación)>",
     "leyenda": "<1 frase escala cromática: verde intenso >+3%, verde suave subidas leves, gris neutro, rojo suave caídas leves, rojo intenso <-3%>",
     "insight_clave": "<1-2 frases lectura visual únicamente: qué sector domina visualmente, qué patrón de color destaca. NO repetir análisis sectorial.>"
   },
-  "analisis_sectorial_texto": "<80-100 palabras: mejor sector con motivo (POR QUÉ, no QUÉ), peor sector con motivo, 1 divergencia notable si existe. No repetir el QUÉ ya visible en los gráficos.>",
   "noticias": [
     {
       "sentimiento": "POSITIVO|NEGATIVO|NEUTRO",
@@ -96,7 +97,6 @@ NUNCA generes en ningún campo:
     "evento": "<nombre del evento económico más relevante de los próximos días>",
     "contexto": "<2-3 frases: cuándo, qué mide, cómo puede afectar al IBEX>"
   },
-  "conclusion": "<80-100 palabras. NUNCA vacía. Estructura: tono general de sesión (1 frase) + factor dominante a vigilar (1-2 frases) + niveles técnicos IBEX soporte y resistencia concretos (1 frase) + escenario base próxima sesión (1-2 frases).>",
   "calidad_datos": "completos|parciales|limitados",
   "disclaimer": "Este informe ha sido generado de forma automatizada con fines meramente informativos y no constituye asesoramiento financiero ni recomendación de inversión. Las secciones de ideas son análisis técnicos objetivos para seguimiento, no constituyen consejo de inversión."
 }

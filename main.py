@@ -83,6 +83,28 @@ def is_market_open_today() -> bool:
     return get_last_market_date() == today
 
 
+def clear_today_data(date_str: str, config: dict, logger: logging.Logger):
+    """Elimina todos los ficheros del día para forzar una ejecución limpia."""
+    patterns = [
+        os.path.join(config.get("data_raw_dir", "data/raw"),      f"*{date_str}*"),
+        os.path.join(config.get("data_analysis_dir", "data/analysis"), f"*{date_str}*"),
+        os.path.join(config.get("output_dir", "output"),           f"*{date_str}*"),
+    ]
+    deleted = []
+    for pattern in patterns:
+        import glob as _glob
+        for f in _glob.glob(pattern):
+            try:
+                os.remove(f)
+                deleted.append(f)
+            except Exception as e:
+                logger.warning(f"No se pudo eliminar {f}: {e}")
+    if deleted:
+        logger.info(f"[CLEAN] {len(deleted)} fichero(s) del día {date_str} eliminados antes de ejecutar.")
+    else:
+        logger.info(f"[CLEAN] No había ficheros del día {date_str} que eliminar.")
+
+
 def main():
     ensure_directories()
     logger = setup_logging()
@@ -137,6 +159,9 @@ def main():
     except Exception as e:
         logger.error(f"No se pudo obtener la composición del IBEX 35: {e}. Abortando.")
         sys.exit(1)
+
+    if force:
+        clear_today_data(last_market_date, config, logger)
 
     leader = LeaderAgent(config, logger)
     result = leader.run(date=last_market_date)

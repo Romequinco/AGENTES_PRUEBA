@@ -156,7 +156,7 @@ class LeaderAgent:
             try:
                 response = self.client.messages.create(
                     model=self.model,
-                    max_tokens=512,
+                    max_tokens=1024,
                     system=self.system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                     timeout=300.0,

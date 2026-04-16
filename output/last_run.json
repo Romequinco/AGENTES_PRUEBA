@@ -2,11 +2,11 @@
   "status": "success",
   "date": "2026-04-16",
   "pdf_path": "output\\informe_2026-04-16.pdf",
-  "qa_score": 105,
+  "qa_score": 92,
   "qa_recommendation": "approved",
   "qa_issues": [],
   "errors": [],
-  "elapsed_seconds": 257.4,
-  "timestamp": "2026-04-16T12:19:09.596322+02:00",
+  "elapsed_seconds": 189.5,
+  "timestamp": "2026-04-16T13:12:46.062818+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }
