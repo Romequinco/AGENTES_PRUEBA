@@ -1,14 +1,12 @@
 {
   "status": "success",
-  "date": "2026-04-15",
-  "pdf_path": "output\\informe_2026-04-15.pdf",
-  "qa_score": 98,
+  "date": "2026-04-16",
+  "pdf_path": "output\\informe_2026-04-16.pdf",
+  "qa_score": 105,
   "qa_recommendation": "approved",
-  "qa_issues": [
-    "range_extremes contiene listas vacías (near_52w_high y near_52w_low sin datos), aunque esto es permitido según criterios"
-  ],
+  "qa_issues": [],
   "errors": [],
-  "elapsed_seconds": 190.0,
-  "timestamp": "2026-04-15T19:40:05.660125+02:00",
+  "elapsed_seconds": 257.4,
+  "timestamp": "2026-04-16T12:19:09.596322+02:00",
   "model_leader": "claude-haiku-4-5-20251001"
 }

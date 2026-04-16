@@ -226,14 +226,14 @@ class AnalystAgent:
         return "\n".join(lines) if lines else "Sin datos macro"
 
     def _build_volume_alerts(self, indicators: dict) -> str:
-        """Lista acciones con volumen inusual (ratio >= 1.5x respecto a media 20 días)."""
+        """Lista acciones con volumen inusual (ratio > 2.0x respecto a media 20 días)."""
         if not indicators:
             return "Sin datos de volumen"
         alerts = []
         for ticker, ind in indicators.items():
             ratio = ind.get("volume_ratio")
             signal = ind.get("volume_signal", "normal")
-            if ratio and ratio >= 1.5:
+            if ratio and ratio > 2.0:
                 chg = ind.get("change_pct", 0) or 0
                 direction = "subida" if chg > 0 else ("bajada" if chg < 0 else "lateral")
                 alerts.append(
@@ -241,7 +241,7 @@ class AnalystAgent:
                     f"cambio={chg:+.2f}% {direction} | avg20d={ind.get('avg_volume_20d', 'N/D')}"
                 )
         if not alerts:
-            return "Ningún valor con volumen inusual (todos dentro de 1.5x media 20 días)"
+            return "Ningún valor con volumen inusual (todos por debajo de 2x la media 20 días)"
         return "\n".join(sorted(alerts, key=lambda x: float(x.split("ratio=")[1].split("x")[0]), reverse=True))
 
     def _build_range_summary(self, indicators: dict) -> str:

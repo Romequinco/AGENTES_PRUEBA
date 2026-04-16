@@ -462,6 +462,12 @@ class ResearcherAgent:
             "GC=F":      "Oro (USD/oz)",
             "NG=F":      "Gas Natural (USD/MMBtu)",
             "^VIX":      "VIX (Volatilidad implícita S&P500)",
+            "ES=F":      "S&P 500 Futuros",
+        }
+        # Tickers con fallback (primario puede fallar fuera de horario europeo)
+        MACRO_TICKERS_FALLBACK = {
+            "ES10Y=X": ("Bono 10Y España",             "^TNX",  "Bono 10Y EEUU (proxy España)"),
+            "^VSTOXX":  ("VSTOXX (Volatilidad EuroStoxx)", "V2TX", "VSTOXX proxy V2TX"),
         }
 
         macro_data = {}
@@ -496,6 +502,51 @@ class ResearcherAgent:
                 macro_data[ticker] = entry
             except Exception as e:
                 logger.warning(f"Macro ticker {ticker} fallido: {e}")
+
+        # Tickers con fallback: intentar primario, si falla usar proxy
+        for primary, (name, fallback, fallback_name) in MACRO_TICKERS_FALLBACK.items():
+            fetched = False
+            for yticker, yname, proxy_note in [
+                (primary, name, None),
+                (fallback, fallback_name, f"proxy de {name}")
+            ]:
+                try:
+                    t = yf.Ticker(yticker)
+                    hist = t.history(period="5d", auto_adjust=True)
+                    if hist.empty or len(hist) < 2:
+                        logger.warning(f"Macro {yticker}: sin datos suficientes")
+                        continue
+                    today = hist.iloc[-1]
+                    prev = hist.iloc[-2]
+                    close = float(today["Close"])
+                    prev_close = float(prev["Close"])
+                    entry = {
+                        "name": yname,
+                        "close": round(close, 4),
+                        "prev_close": round(prev_close, 4),
+                        "change_abs": round(close - prev_close, 4),
+                        "change_pct": round((close - prev_close) / prev_close * 100, 2),
+                        "ytd_pct": None,
+                    }
+                    if proxy_note:
+                        entry["proxy_note"] = proxy_note
+                    try:
+                        hist_ytd = t.history(period="ytd", auto_adjust=True)
+                        if not hist_ytd.empty and len(hist_ytd) >= 2:
+                            first = float(hist_ytd.iloc[0]["Close"])
+                            last = float(hist_ytd.iloc[-1]["Close"])
+                            entry["ytd_pct"] = round((last - first) / first * 100, 2)
+                    except Exception:
+                        pass
+                    macro_data[primary] = entry
+                    fetched = True
+                    if proxy_note:
+                        logger.warning(f"Macro {primary} usando {proxy_note} ({yticker})")
+                    break
+                except Exception as e:
+                    logger.warning(f"Macro ticker {yticker} fallido: {e}")
+            if not fetched:
+                logger.warning(f"Macro {primary}: sin datos disponibles (ni primario ni fallback)")
 
         result = {
             "date": self.date,

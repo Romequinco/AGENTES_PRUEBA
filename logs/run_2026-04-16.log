@@ -1,0 +1,54 @@
+2026-04-16 12:14:47,270 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-16 12:14:51,754 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-16 12:14:51,756 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-16 12:14:51,756 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-16 12:14:52,233 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-16 ===
+2026-04-16 12:14:52,233 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-16 12:14:52,234 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-12, fuente: wikipedia)
+2026-04-16 12:14:52,235 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-16 12:14:52,235 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-16 12:14:52,235 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-12)
+2026-04-16 12:14:52,235 [INFO] bolsa.researcher: Descargando precios e indicadores IBEX 35 para 2026-04-16 (35 tickers, 60d histórico)
+2026-04-16 12:15:08,777 [INFO] bolsa.researcher: Tickers con datos válidos: 35/35
+2026-04-16 12:15:08,783 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-16.csv
+2026-04-16 12:15:08,786 [INFO] bolsa.researcher: Indicadores guardados en data/raw\ibex35_indicators_2026-04-16.json (35 tickers)
+2026-04-16 12:15:08,786 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-16 12:15:09,572 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 48 noticias
+2026-04-16 12:15:21,799 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-16 12:15:21,801 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-16.json (48 items)
+2026-04-16 12:15:25,008 [WARNING] bolsa.researcher: Macro ES10Y=X: sin datos suficientes
+2026-04-16 12:15:25,319 [WARNING] bolsa.researcher: Macro ES10Y=X usando proxy de Bono 10Y España (^TNX)
+2026-04-16 12:15:26,289 [WARNING] bolsa.researcher: Macro ^VSTOXX: sin datos suficientes
+2026-04-16 12:15:26,936 [WARNING] bolsa.researcher: Macro V2TX: sin datos suficientes
+2026-04-16 12:15:26,936 [WARNING] bolsa.researcher: Macro ^VSTOXX: sin datos disponibles (ni primario ni fallback)
+2026-04-16 12:15:26,938 [INFO] bolsa.researcher: Datos macro guardados en data/raw\macro_2026-04-16.json (12 indicadores)
+2026-04-16 12:15:27,727 [INFO] bolsa.researcher: Calendario económico guardado: data/raw\calendar_2026-04-16.json (89 eventos)
+2026-04-16 12:15:27,729 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-16 12:15:27,729 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-16 12:17:24,394 [INFO] bolsa.analyst: Analyst respuesta: stop_reason=end_turn, content_blocks=1, chars=38090
+2026-04-16 12:17:24,394 [INFO] bolsa.analyst: Analyst primeros 300 chars: {
+  "market_summary": {
+    "ibex35_performance": "plano",
+    "ibex35_change_pct": -0.02,
+    "ibex35_close_pts": 18181.9,
+    "market_sentiment": "neutral",
+    "volatility_level": "moderada",
+    "volume_vs_average": "normal",
+    "summary_text": "El IBEX 35 cerró prácticamente plano con una vari
+2026-04-16 12:17:24,397 [INFO] bolsa.analyst: Análisis guardado en data/analysis\ibex35_analysis_2026-04-16.json
+2026-04-16 12:17:24,397 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-16 12:17:24,397 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-16 12:18:38,273 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-16.pdf (420 KB)
+2026-04-16 12:18:38,276 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-16.pdf
+2026-04-16 12:18:38,276 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-16 12:19:09,593 [WARNING] bolsa.leader: Líder: validación LLM fallida, usando validación básica
+2026-04-16 12:19:09,593 [INFO] bolsa.leader: [ QA ] Score: 105/100 — APPROVED
+2026-04-16 12:19:09,595 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-16
+  PDF:       output\informe_2026-04-16.pdf
+  QA Score:  105/100
+  Tiempo:    257s
+  Errores:   ninguno
+2026-04-16 12:19:09,597 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-16 12:19:09,597 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-16.pdf

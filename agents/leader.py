@@ -181,7 +181,7 @@ class LeaderAgent:
         score = 0
 
         # Campos obligatorios de primer nivel (15 pts)
-        required_fields = ["market_summary", "top_gainers", "top_losers", "sector_analysis", "report_highlights"]
+        required_fields = ["market_summary", "top_gainers", "top_losers", "sector_analysis", "ideas_vigilar"]
         missing = [f for f in required_fields if f not in analysis]
         if not missing:
             score += 15
@@ -214,12 +214,12 @@ class LeaderAgent:
         else:
             issues.append(f"Sectores insuficientes: {len(sectors)} (mínimo 4)")
 
-        # report_highlights no vacío (10 pts)
-        highlights = analysis.get("report_highlights", [])
+        # ideas_vigilar no vacío (10 pts)
+        highlights = analysis.get("ideas_vigilar", analysis.get("actionable_ideas", []))
         if isinstance(highlights, list) and len(highlights) > 0:
             score += 10
         else:
-            issues.append("report_highlights vacío o ausente")
+            issues.append("ideas_vigilar vacío o ausente")
 
         # Nuevas secciones de valor (20 pts = 5+5+5+5)
         macro_ctx = analysis.get("macro_context", {})
@@ -234,11 +234,17 @@ class LeaderAgent:
         else:
             issues.append("movement_attribution ausente o sin contributors")
 
-        actionable = analysis.get("actionable_ideas", [])
+        actionable = analysis.get("ideas_vigilar", analysis.get("actionable_ideas", []))
         if isinstance(actionable, list) and len(actionable) >= 1:
             score += 5
         else:
-            issues.append("actionable_ideas ausente o vacío")
+            issues.append("ideas_vigilar ausente o vacío")
+
+        tech_signals = analysis.get("technical_signals", [])
+        if len(tech_signals) <= 8:
+            score += 5
+        else:
+            issues.append(f"technical_signals excede máximo de 8: {len(tech_signals)}")
 
         range_ext = analysis.get("range_extremes", {})
         if isinstance(range_ext, dict) and ("near_52w_high" in range_ext or "near_52w_low" in range_ext):
