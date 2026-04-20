@@ -97,7 +97,7 @@ FORCE_RUN=true python main.py
 ## CI/CD — GitHub Actions
 
 El workflow `.github/workflows/ibex35_report.yml` se ejecuta automáticamente:
-- **Automático:** lunes a viernes a las 17:35 Madrid (15:35 UTC)
+- **Automático:** lunes a viernes a las **18:30 Madrid** todo el año — dos entradas de cron (`30 16` y `30 17` UTC) para cubrir verano (UTC+2) e invierno (UTC+1). El segundo disparo del día es absorbido por una guardia en `main.py` que detecta si el informe ya fue generado.
 - **Manual:** `workflow_dispatch` con opción `force_run=true`
 
 El informe generado se sube como artefacto del workflow.

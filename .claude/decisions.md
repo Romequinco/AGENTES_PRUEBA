@@ -44,6 +44,16 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 006 — Doble cron para garantizar 18:30 Madrid todo el año
+
+**Decisión:** Dos entradas de cron en GitHub Actions (`30 16` y `30 17` UTC) en lugar de una sola.
+
+**Por qué:** GitHub Actions cron es UTC fijo y no entiende de horario de verano/invierno. Con una sola entrada, el informe salía a las 18:00 en verano y a las 17:00 en invierno (fuera de la ventana y con datos sin consolidar). La única forma de garantizar exactamente las 18:30 Madrid en ambas estaciones es con dos entradas.
+
+**Cómo aplicar:** Ambos crons se disparan siempre. El segundo run del día es absorbido por la guardia en `main.py` (comprueba si `output/informe_YYYY-MM-DD.pdf` ya existe antes de arrancar el pipeline).
+
+---
+
 ## 005 — GitHub Actions como scheduler (no cron local)
 
 **Decisión:** La ejecución diaria se dispara desde GitHub Actions, no desde un cron en un servidor propio.

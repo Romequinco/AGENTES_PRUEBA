@@ -41,7 +41,8 @@ def check_market_hours() -> bool:
         return True
     madrid = pytz.timezone("Europe/Madrid")
     now = datetime.now(madrid)
-    return now.hour == 17 and now.minute >= 35 or now.hour == 18
+    # Cubre 17:30–19:30 para absorber verano (18:30), invierno (17:30) y retrasos de Actions
+    return (now.hour == 17 and now.minute >= 30) or now.hour == 18 or (now.hour == 19 and now.minute <= 30)
 
 
 def get_last_market_date() -> str | None:
@@ -123,6 +124,13 @@ def main():
 
     if not check_market_hours():
         logger.info("Fuera del horario de ejecución (17:35–19:00 Madrid). Sin informe.")
+        sys.exit(0)
+
+    # Guardia anti-doble-run: si el informe de hoy ya existe, no volver a generarlo
+    output_dir = os.getenv("OUTPUT_DIR", "output")
+    pdf_hoy = os.path.join(output_dir, f"informe_{last_market_date}.pdf")
+    if not force and os.path.exists(pdf_hoy):
+        logger.info(f"Informe del día ya generado ({pdf_hoy}). Sin acción.")
         sys.exit(0)
 
     from agents.leader import LeaderAgent
