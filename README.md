@@ -1,6 +1,6 @@
 # IBEX 35 — Informe Diario Automático
 
-Sistema multi-agente que genera informes PDF del mercado español de forma automática cada día hábil a las 18:00 (Madrid), usando la API de Claude.
+Sistema multi-agente que genera informes del mercado español de forma automática cada día hábil a las 17:35 (Madrid), usando la API de Claude.
 
 ---
 
@@ -8,13 +8,13 @@ Sistema multi-agente que genera informes PDF del mercado español de forma autom
 
 ```mermaid
 flowchart TD
-    GH["GitHub Actions\nlun–vie 18:00"]
+    GH["GitHub Actions\nlun–vie 17:35 Madrid"]
     M["main.py\nValidación horario + mercado"]
-    L["Leader Agent\nclaude-haiku"]
-    R["Researcher Agent\nsin LLM"]
-    A["Analyst Agent\nclaude-haiku"]
-    W["Writer Agent\nclaude-haiku"]
-    OUT["Informe PDF\noutput/"]
+    L["Leader Agent\nOpus — Orquestador y validador"]
+    R["Researcher Agent\nSonnet — sin escritura de output"]
+    A["Analyst Agent\nSonnet — sin escritura de output"]
+    W["Writer Agent\nSonnet — único con acceso a output/"]
+    OUT["Informe 7 páginas\noutput/"]
 
     GH --> M --> L
     L --> R & A
@@ -24,12 +24,14 @@ flowchart TD
     L -->|valida| OUT
 ```
 
-| Agente | Responsabilidad | Escribe archivos |
-|---|---|---|
-| **Leader** | Orquesta el pipeline y valida el resultado final | No |
-| **Researcher** | Descarga precios, volúmenes y noticias (yfinance + RSS) | `data/raw/` |
-| **Analyst** | Análisis técnico y fundamental con LLM | `data/analysis/` |
-| **Writer** | Redacta el informe y genera el PDF con gráficos | `output/` |
+| Agente | Módulo | Modelo | Escribe |
+|---|---|---|---|
+| **Leader** | `agents/leader.py` | Opus | No |
+| **Researcher** | `agents/researcher.py` | Sonnet | `data/raw/` |
+| **Analyst** | `agents/analyst.py` | Sonnet | `data/analysis/` |
+| **Writer** | `agents/writer.py` | Sonnet | `output/` |
+
+El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cuando ambos terminan. El Leader valida el informe final antes de darlo por completado.
 
 ---
 
@@ -37,19 +39,36 @@ flowchart TD
 
 ```
 ├── agents/
-│   ├── leader.py        # Orquestador y validador
-│   ├── researcher.py    # Recopilación de datos (sin LLM)
-│   ├── analyst.py       # Análisis con Claude
-│   ├── writer.py        # Generación de PDF
-│   └── ibex_data.py     # Composición y caché del IBEX 35
-├── skills/              # Prompts de sistema de cada agente
+│   ├── leader.py        # Orquestador y validador final
+│   ├── researcher.py    # Recopilación de datos de mercado (yfinance + RSS)
+│   ├── analyst.py       # Análisis técnico y fundamental con LLM
+│   ├── writer.py        # Generación del informe con gráficos
+│   ├── ibex_data.py     # Composición y caché del IBEX 35
+│   └── utils.py         # Helpers compartidos (logging, limpieza de runs)
+├── .claude/
+│   ├── CLAUDE.md        # Contexto y reglas para Claude Code
+│   ├── architecture.md  # Diagrama detallado del pipeline
+│   ├── decisions.md     # Log de decisiones de diseño
+│   └── estado_actual.md # Estado operativo actual del sistema
 ├── data/
-│   ├── raw/             # JSONs de mercado
-│   └── analysis/        # JSONs de análisis
-├── output/              # Informes PDF generados
-├── logs/                # Logs de ejecución
+│   ├── raw/             # JSONs de mercado (output del Researcher)
+│   └── analysis/        # JSONs de análisis (output del Analyst)
+├── output/              # Informes generados, un archivo por día
+├── logs/                # Logs de ejecución: run_YYYY-MM-DD.log
 └── main.py              # Punto de entrada
 ```
+
+---
+
+## Informe generado (7 páginas)
+
+1. Cabecera macro — 10 indicadores clave
+2. Tabla resumen IBEX 35 — precio, variación, volumen, señal técnica
+3. Mapa de calor sectorial
+4. Gráfico de 52 semanas
+5. Atribución de rentabilidad
+6. Ideas de mercado
+7. Calendario económico
 
 ---
 
@@ -58,12 +77,7 @@ flowchart TD
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env   # añade ANTHROPIC_API_KEY
-```
-
-**.env mínimo:**
-```env
-ANTHROPIC_API_KEY=sk-ant-...
+cp .env.example .env   # añade ANTHROPIC_API_KEY y variables opcionales
 ```
 
 ---
@@ -71,24 +85,22 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## Uso
 
 ```bash
-# Ejecución normal (respeta horario de mercado)
+# Ejecución normal (respeta horario de mercado: 17:35–19:00 Madrid)
 python main.py
 
-# Forzar ejecución fuera de horario
+# Forzar ejecución fuera de horario (tests, desarrollo)
 FORCE_RUN=true python main.py
 ```
-
-El script verifica que el mercado haya abierto hoy y que la hora sea entre las 17:35–19:00 (Madrid). Fuera de esas condiciones sale sin error.
 
 ---
 
 ## CI/CD — GitHub Actions
 
 El workflow `.github/workflows/ibex35_report.yml` se ejecuta automáticamente:
-- **Automático:** lunes a viernes a las 16:00 UTC (18:00 Madrid)
+- **Automático:** lunes a viernes a las 17:35 Madrid (15:35 UTC)
 - **Manual:** `workflow_dispatch` con opción `force_run=true`
 
-El PDF generado se sube como artefacto del workflow.
+El informe generado se sube como artefacto del workflow.
 
 **Secret requerido:** `ANTHROPIC_API_KEY` en los secrets del repositorio.
 
@@ -99,9 +111,9 @@ El PDF generado se sube como artefacto del workflow.
 | Variable | Default | Descripción |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | **Obligatorio** |
-| `MODEL_LEADER` | `claude-haiku-4-5-20251001` | Modelo del orquestador |
-| `MODEL_ANALYST` | `claude-haiku-4-5-20251001` | Modelo del analista |
-| `MODEL_WRITER` | `claude-haiku-4-5-20251001` | Modelo del redactor |
+| `MODEL_LEADER` | `claude-opus-4-7` | Modelo del orquestador |
+| `MODEL_ANALYST` | `claude-sonnet-4-6` | Modelo del analista |
+| `MODEL_WRITER` | `claude-sonnet-4-6` | Modelo del redactor |
 | `FORCE_RUN` | `false` | Ignora validación de horario |
 | `MAX_RETRIES` | `3` | Reintentos por agente |
 | `IBEX_CACHE_DAYS` | `7` | Días de validez de la caché del IBEX |

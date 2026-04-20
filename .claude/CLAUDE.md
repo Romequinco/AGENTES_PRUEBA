@@ -1,58 +1,58 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guía de contexto para Claude Code en este repositorio. Ver también:
+- [`.claude/architecture.md`](.claude/architecture.md) — diagrama del pipeline y módulos Python
+- [`.claude/decisions.md`](.claude/decisions.md) — registro de decisiones de diseño
+- [`.claude/estado_actual.md`](.claude/estado_actual.md) — qué funciona, qué no, próximos pasos
 
 ## Propósito del proyecto
 
-Sistema multi-agente para generar informes automáticos de la bolsa española. Un agente orquestador coordina tres subagentes especializados:
+Sistema multi-agente para generar informes automáticos del IBEX 35. Un orquestador coordina tres subagentes especializados que se ejecutan diariamente vía GitHub Actions a las 17:35 (cierre del mercado Madrid).
 
-1. **Agente Recopilador** — obtiene datos de mercado (precios, volúmenes, noticias)
-2. **Agente Analista** — análisis técnico y fundamental sobre los datos recopilados
-3. **Agente Redactor** — genera el texto del informe en formato legible
-
-El **Orquestador** coordina el pipeline y además actúa como validador: verifica coherencia, datos y calidad del informe final antes de darlo por completado. Pipeline: Recopilador → Analista → Redactor → (validación por el Orquestador).
+Pipeline: **Recopilador → Analista → Redactor → Validación por el Orquestador**
 
 ## Arquitectura de agentes
 
-Los agentes se definen en `.claude/agents/`. Cada uno tiene herramientas y modelo asignados según su función:
+Definidos en `.claude/agents/` (frontmatter con modelo y herramientas). Los módulos Python equivalentes están en `agents/`.
 
-- El **Recopilador** y el **Analista** son de solo lectura (herramientas: `Read`, `Bash`, `WebFetch`)
-- El **Redactor** puede escribir archivos de salida (agrega `Write`)
-- El **Orquestador** usa `Opus` para razonamiento más riguroso y validación final; los subagentes usan `Sonnet`
-- El orquestador lanza Recopilador y Analista en paralelo cuando no hay dependencias, luego Redactor en secuencia, y finalmente valida el resultado él mismo
+| Agente | Módulo Python | Modelo | Herramientas |
+|---|---|---|---|
+| Recopilador | `agents/researcher.py` | Sonnet | Read, Bash, WebFetch |
+| Analista | `agents/analyst.py` | Sonnet | Read, Bash, WebFetch |
+| Redactor | `agents/writer.py` | Sonnet | Read, Bash, WebFetch, Write |
+| Orquestador | `agents/leader.py` | Opus | Todas |
 
-Los subagentes **no heredan** el historial de conversación del padre. El prompt de cada invocación debe incluir el contexto necesario (ticker, fecha, datos previos relevantes).
+El orquestador lanza Recopilador y Analista **en paralelo**, luego Redactor en secuencia, y finalmente valida él mismo el resultado.
 
 ## Reglas de orquestación
 
 - El orquestador nunca escribe datos directamente; delega toda escritura al Redactor
-- Los subagentes de análisis son read-only: si un subagente de análisis intenta modificar archivos, es un error de diseño
-- Cada invocación de subagente debe incluir criterios de éxito explícitos y formato de salida esperado
+- Los subagentes de análisis son read-only: si intentan modificar archivos, es un error de diseño
+- Los subagentes **no heredan** el historial del padre — cada prompt debe incluir el contexto necesario
+- Cada invocación debe incluir criterios de éxito explícitos y formato de salida esperado
 - Usar `isolation: worktree` solo si dos agentes deben editar archivos distintos en paralelo
 
-## Estructura de directorios (convención)
+## Estructura de directorios
 
 ```
 .claude/
-  agents/          # Definiciones de subagentes (.md con frontmatter)
-  skills/          # Skills / slash commands del proyecto
-  hooks/           # Scripts de hooks
-  best_practices.md  # Documentación de referencia de multi-agente
-informes/          # Informes generados (output del Redactor)
-datos/             # Datos de mercado cacheados (output del Recopilador)
+  agents/            # Definiciones de subagentes Claude (.md con frontmatter)
+  skills/            # Slash commands del proyecto (/skill-name)
+  hooks/             # Scripts ejecutados en eventos del ciclo de vida
+  CLAUDE.md          # Este archivo
+  architecture.md    # Diagrama del pipeline y módulos
+  decisions.md       # Log de decisiones de diseño
+  estado_actual.md   # Estado operativo actual del sistema
+  best_practices.md  # Referencia multi-agente
+agents/              # Módulos Python de cada agente
+data/                # Datos de mercado cacheados (raw/ y analysis/)
+output/              # Informes generados (PDF/HTML)
+logs/                # Logs de cada ejecución diaria
 ```
 
-## Mejores prácticas aplicadas a este proyecto
+## Convenciones importantes
 
-- Ver `.claude/best_practices.md` para referencia completa sobre subagentes, skills, hooks y CLAUDE.md
-- El sistema de memoria automática de Claude se mantiene activo; no sobreescribir con información efímera
+- Ver `.claude/best_practices.md` para referencia completa sobre subagentes, skills y hooks
+- El sistema de memoria automática de Claude está activo; no sobreescribir con información efímera
 - Mantener este CLAUDE.md bajo 200 líneas; mover reglas específicas a `.claude/rules/` si crecen
-
-## Selección de modelo por agente
-
-| Agente | Modelo | Razón |
-|---|---|---|
-| Recopilador | Sonnet | Tarea estructurada, no requiere razonamiento complejo |
-| Analista | Sonnet | Análisis estándar |
-| Redactor | Sonnet | Generación de texto |
-| Orquestador / Validador | Opus | Coordinación general + razonamiento crítico y detección de inconsistencias |
+- `check_market_hours()` en `main.py` controla si se ejecuta; usar `FORCE_RUN=true` para pruebas fuera de horario
