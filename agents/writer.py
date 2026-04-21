@@ -1770,4 +1770,47 @@ class WriterAgent:
         logger.info(f"PDF generado: {out_path} ({size_kb:.0f} KB)")
         if size_kb < 50:
             raise WriterError(f"PDF demasiado pequeño ({size_kb:.0f} KB), posible error de generación")
+
         return out_path
+
+
+def generate_newsletter_data(analysis_json: dict) -> dict:
+    """Extrae los campos clave del JSON del Analista para el newsletter diario.
+
+    Recibe el dict parseado de ibex35_analysis_YYYY-MM-DD.json y devuelve
+    un dict plano listo para serializar a JSON y para el formateador HTML.
+    """
+    summary = analysis_json.get("market_summary", {})
+
+    def _extract_top3(items: list) -> list:
+        result = []
+        for item in (items or [])[:3]:
+            result.append({
+                "ticker": item.get("ticker", ""),
+                "name": item.get("name", ""),
+                "change_pct": item.get("change_pct", 0.0),
+            })
+        return result
+
+    # idea_dia: primera idea de la lista ideas_vigilar, o None
+    ideas = analysis_json.get("ideas_vigilar") or []
+    idea_dia = None
+    if ideas:
+        first = ideas[0]
+        idea_dia = {
+            "ticker": first.get("ticker", ""),
+            "nombre": first.get("nombre", ""),
+            "setup": first.get("setup_type", ""),
+            "contexto": first.get("contexto", ""),
+        }
+
+    return {
+        "fecha": analysis_json.get("analysis_date", ""),
+        "ibex_cierre": summary.get("ibex35_close_pts"),
+        "cambio_pct": summary.get("ibex35_change_pct"),
+        "sentimiento": summary.get("market_sentiment", "neutral"),
+        "resumen": summary.get("summary_text", ""),
+        "top_3_ganadores": _extract_top3(analysis_json.get("top_gainers", [])),
+        "top_3_perdedores": _extract_top3(analysis_json.get("top_losers", [])),
+        "idea_dia": idea_dia,
+    }

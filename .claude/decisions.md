@@ -44,6 +44,16 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 005 — GitHub Actions como scheduler (no cron local)
+
+**Decisión:** La ejecución diaria se dispara desde GitHub Actions, no desde un cron en un servidor propio.
+
+**Por qué:** Sin infraestructura propia que mantener. GitHub Actions tiene logs integrados, reintentos y notificaciones de fallo. El coste es prácticamente cero para una ejecución diaria de pocos minutos.
+
+**Limitación conocida:** GitHub Actions puede tener retrasos de hasta 10-15 min en el disparo del cron. Para el caso de uso (informe de cierre de mercado) es aceptable.
+
+---
+
 ## 006 — Doble cron para garantizar 18:30 Madrid todo el año
 
 **Decisión:** Dos entradas de cron en GitHub Actions (`30 16` y `30 17` UTC) en lugar de una sola.
@@ -54,10 +64,30 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
-## 005 — GitHub Actions como scheduler (no cron local)
+## 007 — PostgreSQL obligatorio (no SQLite) para el newsletter
 
-**Decisión:** La ejecución diaria se dispara desde GitHub Actions, no desde un cron en un servidor propio.
+**Decisión:** `db/models.py` requiere `DATABASE_URL` con PostgreSQL. SQLite está explícitamente descartado.
 
-**Por qué:** Sin infraestructura propia que mantener. GitHub Actions tiene logs integrados, reintentos y notificaciones de fallo. El coste es prácticamente cero para una ejecución diaria de pocos minutos.
+**Por qué:** Railway (plataforma de producción) tiene filesystem efímero — cada redeploy borra el disco. SQLite perdería todos los suscriptores en cada deploy. PostgreSQL persiste en un addon separado del filesystem.
 
-**Limitación conocida:** GitHub Actions puede tener retrasos de hasta 10-15 min en el disparo del cron. Para el caso de uso (informe de cierre de mercado) es aceptable.
+**Cómo aplicar:** Si `DATABASE_URL` no está en el entorno, `db/models.py` lanza `EnvironmentError` inmediatamente con mensaje claro. `_run_newsletter()` en `main.py` comprueba la variable antes de intentar conectar, y si no está presente omite el envío sin crashear el pipeline.
+
+---
+
+## 008 — Newsletter no bloquea el pipeline principal
+
+**Decisión:** `_run_newsletter()` en `main.py` captura todas las excepciones y las loguea sin relanzarlas. El pipeline termina con `sys.exit(0)` aunque el newsletter falle.
+
+**Por qué:** El valor primario del sistema es el informe PDF diario. Un fallo de SendGrid, de red o de la DB no debe impedir que el PDF se genere. Los dos sistemas son independientes en cuanto a criticidad.
+
+**Cómo aplicar:** Si el newsletter falla, aparece `[NEWSLETTER] Error inesperado` en el log pero el proceso termina con código 0.
+
+---
+
+## 009 — SendGrid Personalizations API (batch, no loop)
+
+**Decisión:** `send_bulk_newsletter()` construye un único payload con todas las `personalizations` y hace un solo request HTTP, no un loop de `send_per_user`.
+
+**Por qué:** Un loop de N usuarios hace N requests HTTP — lento, más puntos de fallo y agota el rate limit de SendGrid con listas grandes. La API de Personalizations acepta hasta 1000 destinatarios por request; para listas mayores se usa batching interno automático.
+
+**Cómo aplicar:** Si en el futuro se necesita personalizar el contenido por usuario (nombre, ticker favorito), se añaden campos dentro de cada objeto de `personalizations` — no hace falta cambiar la arquitectura.

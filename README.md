@@ -1,6 +1,6 @@
-# IBEX 35 — Informe Diario Automático
+# IBEX 35 — Informe Diario Automático + Newsletter
 
-Sistema multi-agente que genera informes del mercado español de forma automática cada día hábil a las 17:35 (Madrid), usando la API de Claude.
+Sistema multi-agente que genera informes del mercado español de forma automática cada día hábil a las 17:35 (Madrid), usando la API de Claude. Incluye una capa de newsletter por email con API REST.
 
 ---
 
@@ -15,6 +15,9 @@ flowchart TD
     A["Analyst Agent\nSonnet — sin escritura de output"]
     W["Writer Agent\nSonnet — único con acceso a output/"]
     OUT["Informe 7 páginas\noutput/"]
+    NL["_run_newsletter()\nno bloquea el pipeline"]
+    DB["PostgreSQL\nusuarios y suscriptores"]
+    SG["SendGrid\nemail batch"]
 
     GH --> M --> L
     L --> R & A
@@ -22,6 +25,9 @@ flowchart TD
     A -->|análisis JSON| W
     W --> OUT
     L -->|valida| OUT
+    OUT --> NL
+    NL --> DB
+    NL --> SG
 ```
 
 | Agente | Módulo | Modelo | Escribe |
@@ -31,7 +37,7 @@ flowchart TD
 | **Analyst** | `agents/analyst.py` | Sonnet | `data/analysis/` |
 | **Writer** | `agents/writer.py` | Sonnet | `output/` |
 
-El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cuando ambos terminan. El Leader valida el informe final antes de darlo por completado.
+El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cuando ambos terminan. El Leader valida el informe final antes de darlo por completado. Tras el PDF, `_run_newsletter()` envía el email a los suscriptores activos — si falla, no afecta al pipeline.
 
 ---
 
@@ -42,9 +48,16 @@ El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cua
 │   ├── leader.py        # Orquestador y validador final
 │   ├── researcher.py    # Recopilación de datos de mercado (yfinance + RSS)
 │   ├── analyst.py       # Análisis técnico y fundamental con LLM
-│   ├── writer.py        # Generación del informe con gráficos
+│   ├── writer.py        # Generación del informe con gráficos + generate_newsletter_data()
 │   ├── ibex_data.py     # Composición y caché del IBEX 35
 │   └── utils.py         # Helpers compartidos (logging, limpieza de runs)
+├── db/
+│   └── models.py        # Modelos SQLAlchemy: User, NewsletterSubscriber (PostgreSQL)
+├── services/
+│   ├── email_formatter.py  # HTML mobile-friendly del newsletter
+│   └── email_sender.py     # Envío batch via SendGrid Personalizations API
+├── api/
+│   └── flask_app.py     # POST /register, GET /api/v1/newsletter/latest, GET /health
 ├── .claude/
 │   ├── CLAUDE.md        # Contexto y reglas para Claude Code
 │   ├── architecture.md  # Diagrama detallado del pipeline
@@ -52,7 +65,7 @@ El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cua
 │   └── estado_actual.md # Estado operativo actual del sistema
 ├── data/
 │   ├── raw/             # JSONs de mercado (output del Researcher)
-│   └── analysis/        # JSONs de análisis (output del Analyst)
+│   └── analysis/        # JSONs de análisis + newsletter_YYYY-MM-DD.json
 ├── output/              # Informes generados, un archivo por día
 ├── logs/                # Logs de ejecución: run_YYYY-MM-DD.log
 └── main.py              # Punto de entrada
@@ -77,7 +90,10 @@ El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cua
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env   # añade ANTHROPIC_API_KEY y variables opcionales
+cp .env.example .env   # rellenar variables (ver sección de variables de entorno)
+
+# Crear tablas en PostgreSQL (solo la primera vez)
+python -c "from dotenv import load_dotenv; load_dotenv(); from db.models import create_tables; create_tables()"
 ```
 
 ---
@@ -89,7 +105,11 @@ cp .env.example .env   # añade ANTHROPIC_API_KEY y variables opcionales
 python main.py
 
 # Forzar ejecución fuera de horario (tests, desarrollo)
-FORCE_RUN=true python main.py
+FORCE_RUN=true python main.py          # bash/Linux
+$env:FORCE_RUN="true"; python main.py  # PowerShell
+
+# Arrancar la API Flask
+python api/flask_app.py
 ```
 
 ---
@@ -102,24 +122,28 @@ El workflow `.github/workflows/ibex35_report.yml` se ejecuta automáticamente:
 
 El informe generado se sube como artefacto del workflow.
 
-**Secret requerido:** `ANTHROPIC_API_KEY` en los secrets del repositorio.
+**Secrets requeridos:** `ANTHROPIC_API_KEY`, `DATABASE_URL`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`.
 
 ---
 
 ## Variables de entorno
 
-| Variable | Default | Descripción |
+| Variable | Obligatoria | Descripción |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Obligatorio** |
-| `MODEL_LEADER` | `claude-opus-4-7` | Modelo del orquestador |
-| `MODEL_ANALYST` | `claude-sonnet-4-6` | Modelo del analista |
-| `MODEL_WRITER` | `claude-sonnet-4-6` | Modelo del redactor |
-| `FORCE_RUN` | `false` | Ignora validación de horario |
-| `MAX_RETRIES` | `3` | Reintentos por agente |
-| `IBEX_CACHE_DAYS` | `7` | Días de validez de la caché del IBEX |
+| `ANTHROPIC_API_KEY` | Sí | Clave API de Anthropic |
+| `DATABASE_URL` | Sí (newsletter) | URL PostgreSQL. Sin ella el newsletter se omite silenciosamente |
+| `SENDGRID_API_KEY` | Sí (newsletter) | Clave API de SendGrid |
+| `SENDGRID_FROM_EMAIL` | Sí (newsletter) | Email remitente verificado en SendGrid |
+| `MODEL_LEADER` | No | Modelo del orquestador (default: haiku) |
+| `MODEL_ANALYST` | No | Modelo del analista (default: haiku) |
+| `MODEL_WRITER` | No | Modelo del redactor (default: haiku) |
+| `FORCE_RUN` | No | `true` para ignorar validación de horario |
+| `MAX_RETRIES` | No | Reintentos por agente (default: 3) |
+| `IBEX_CACHE_DAYS` | No | Días de validez de la caché del IBEX (default: 7) |
+| `FINNHUB_API_KEY` | No | Para noticias adicionales |
 
 ---
 
 ## Stack
 
-`Python 3.11` · `anthropic` · `yfinance` · `pandas` · `matplotlib` · `reportlab` · `feedparser`
+`Python 3.11` · `anthropic` · `yfinance` · `pandas` · `matplotlib` · `reportlab` · `feedparser` · `SQLAlchemy` · `psycopg2` · `Flask` · `sendgrid`

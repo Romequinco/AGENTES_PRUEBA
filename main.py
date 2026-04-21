@@ -176,10 +176,80 @@ def main():
 
     if result["status"] == "success":
         logger.info(f"Pipeline completado. PDF: {result['pdf_path']}")
+        _run_newsletter(last_market_date, config, logger)
         sys.exit(0)
     else:
         logger.error(f"Pipeline fallido: {result['errors']}")
         sys.exit(1)
+
+
+def _run_newsletter(fecha: str, config: dict, logger: logging.Logger):
+    """Genera y envía el newsletter. Falla silenciosamente para no romper el pipeline."""
+    try:
+        import json as _json
+
+        analysis_path = os.path.join(
+            config.get("data_analysis_dir", "data/analysis"),
+            f"ibex35_analysis_{fecha}.json",
+        )
+        if not os.path.exists(analysis_path):
+            logger.warning(f"[NEWSLETTER] No se encontró {analysis_path}. Sin envío.")
+            return
+
+        with open(analysis_path, encoding="utf-8") as f:
+            analysis_json = _json.load(f)
+
+        from agents.writer import generate_newsletter_data
+        newsletter_data = generate_newsletter_data(analysis_json)
+
+        # Guardar JSON del newsletter para el endpoint /api/v1/newsletter/latest
+        nl_path = os.path.join(
+            config.get("data_analysis_dir", "data/analysis"),
+            f"newsletter_{fecha}.json",
+        )
+        with open(nl_path, "w", encoding="utf-8") as f:
+            _json.dump(newsletter_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"[NEWSLETTER] JSON guardado: {nl_path}")
+
+        # Comprobar que DATABASE_URL está disponible antes de intentar la DB
+        if not os.environ.get("DATABASE_URL"):
+            logger.warning("[NEWSLETTER] DATABASE_URL no definido. Sin envío de email.")
+            return
+
+        if not os.environ.get("SENDGRID_API_KEY"):
+            logger.warning("[NEWSLETTER] SENDGRID_API_KEY no definido. Sin envío de email.")
+            return
+
+        from db.models import SessionLocal, NewsletterSubscriber, User
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(User.email)
+                .join(NewsletterSubscriber, NewsletterSubscriber.user_id == User.id)
+                .filter(NewsletterSubscriber.active == True)  # noqa: E712
+                .all()
+            )
+            recipients = [r.email for r in rows]
+        finally:
+            db.close()
+
+        if not recipients:
+            logger.info("[NEWSLETTER] No hay suscriptores activos. Sin envío.")
+            return
+
+        from services.email_formatter import format_newsletter_html
+        from services.email_sender import send_bulk_newsletter
+
+        html = format_newsletter_html(newsletter_data)
+        result = send_bulk_newsletter(recipients, html, fecha)
+
+        if result["success"]:
+            logger.info(f"[NEWSLETTER] Enviado a {result['sent']} suscriptores.")
+        else:
+            logger.error(f"[NEWSLETTER] Error en envío: {result['error']}")
+
+    except Exception as exc:
+        logger.error(f"[NEWSLETTER] Error inesperado (pipeline no afectado): {exc}", exc_info=True)
 
 
 if __name__ == "__main__":

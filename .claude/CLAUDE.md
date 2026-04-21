@@ -7,9 +7,9 @@ Guía de contexto para Claude Code en este repositorio. Ver también:
 
 ## Propósito del proyecto
 
-Sistema multi-agente para generar informes automáticos del IBEX 35. Un orquestador coordina tres subagentes especializados que se ejecutan diariamente vía GitHub Actions a las 17:35 (cierre del mercado Madrid).
+Sistema multi-agente para generar informes automáticos del IBEX 35 y enviarlos por email como newsletter. Un orquestador coordina tres subagentes especializados que se ejecutan diariamente vía GitHub Actions a las 17:35 (cierre del mercado Madrid).
 
-Pipeline: **Recopilador → Analista → Redactor → Validación por el Orquestador**
+Pipeline: **Recopilador → Analista → Redactor → Validación por el Orquestador → Newsletter**
 
 ## Arquitectura de agentes
 
@@ -32,6 +32,20 @@ El orquestador lanza Recopilador y Analista **en paralelo**, luego Redactor en s
 - Cada invocación debe incluir criterios de éxito explícitos y formato de salida esperado
 - Usar `isolation: worktree` solo si dos agentes deben editar archivos distintos en paralelo
 
+## Capa de newsletter (Fase 1 — operativa)
+
+La capa de newsletter se ejecuta **después** del pipeline principal y nunca lo bloquea.
+
+| Módulo | Rol |
+|---|---|
+| `agents/writer.py::generate_newsletter_data()` | Extrae campos clave del JSON del Analista |
+| `services/email_formatter.py` | Genera HTML mobile-friendly |
+| `services/email_sender.py` | Envío batch via SendGrid Personalizations API |
+| `db/models.py` | Modelos SQLAlchemy: `User`, `NewsletterSubscriber` |
+| `api/flask_app.py` | API REST: registro de usuarios y consulta del último newsletter |
+
+**Regla crítica:** `DATABASE_URL` debe apuntar a PostgreSQL (no SQLite). Railway tiene filesystem efímero.
+
 ## Estructura de directorios
 
 ```
@@ -45,6 +59,9 @@ El orquestador lanza Recopilador y Analista **en paralelo**, luego Redactor en s
   estado_actual.md   # Estado operativo actual del sistema
   best_practices.md  # Referencia multi-agente
 agents/              # Módulos Python de cada agente
+db/                  # Modelos SQLAlchemy (PostgreSQL)
+services/            # Formateador HTML y sender de email
+api/                 # API Flask
 data/                # Datos de mercado cacheados (raw/ y analysis/)
 output/              # Informes generados (PDF/HTML)
 logs/                # Logs de cada ejecución diaria
@@ -56,3 +73,4 @@ logs/                # Logs de cada ejecución diaria
 - El sistema de memoria automática de Claude está activo; no sobreescribir con información efímera
 - Mantener este CLAUDE.md bajo 200 líneas; mover reglas específicas a `.claude/rules/` si crecen
 - `check_market_hours()` en `main.py` controla si se ejecuta; usar `FORCE_RUN=true` para pruebas fuera de horario
+- `_run_newsletter()` en `main.py` falla silenciosamente — ver logs `[NEWSLETTER]` para diagnóstico
