@@ -134,6 +134,18 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 017 — API Flask dividida en blueprints (no monolito)
+
+**Decisión:** `api/flask_app.py` es una app factory que solo registra blueprints. Cada dominio vive en su propio archivo: `auth.py`, `newsletter.py`, `premium.py`, `pro.py`, `stripe.py`. Los helpers compartidos (`get_db`, `require_premium`, `require_pro`) están en `helpers.py`.
+
+**Por qué:** Con Fases 1-3, `flask_app.py` llegó a 950 líneas mezclando auth, newsletter, alertas, Stripe, estrategias, portfolios y reportes. Tocar Stripe implicaba abrir el mismo archivo que el backtester. Los blueprints separan responsabilidades, reducen conflictos en git y hacen cada archivo navegable de forma independiente.
+
+**Cómo aplicar:** Añadir un endpoint nuevo → identificar su blueprint, añadirlo allí. Añadir un dominio nuevo → crear `api/nuevo_dominio.py` con su Blueprint y registrarlo en `create_app()`. Nunca añadir lógica de negocio directamente en `flask_app.py`.
+
+**Nota:** Las URLs externas no cambiaron — los blueprints no tienen `url_prefix` salvo `/auth` y `/stripe`, que ya formaban parte de las rutas originales.
+
+---
+
 ## 015 — Estrategias de backtesting como JSON (no lambdas Python)
 
 **Decisión:** Las condiciones de compra/venta se definen como JSON (`{"indicator": "rsi", "operator": "below", "value": 30}`) y se guardan tal cual en la columna `JSON` de PostgreSQL. No se usan lambdas ni funciones Python serializadas.

@@ -78,7 +78,13 @@ newsletter_YYYY-MM-DD.json            │
 | `services/fundamental_analyzer.py` | Fundamentales PRO | `fundamental_data(symbol)` + `data_quality_score()` via yfinance — nulls en campos ausentes |
 | `services/portfolio_tracker.py` | Portfolio PRO | `add_position`, `close_position`, `portfolio_summary` con P&L y benchmark `^IBEX` |
 | `services/reporter.py` | Reporte semanal PRO | `generate_weekly_report(user_id)` → PDF en `output/weekly_{user_id}_{fecha}.pdf` |
-| `api/flask_app.py` | API REST | Fase 1: newsletter. Fase 2: auth JWT, alertas, Stripe. Fase 3: 9 endpoints PRO |
+| `api/flask_app.py` | App factory | Crea la app Flask y registra los 5 blueprints. Punto de entrada (`python api/flask_app.py`) |
+| `api/auth.py` | Blueprint auth | `/auth/register`, `/auth/login` |
+| `api/newsletter.py` | Blueprint newsletter | `/register` (legacy), `/api/v1/newsletter/latest`, `/health`, `/dashboard.html` |
+| `api/premium.py` | Blueprint premium | `/api/v1/alerts`, `/api/v1/technical/<symbol>` — requiere tier premium/pro |
+| `api/pro.py` | Blueprint PRO | Estrategias, backtests, portfolios, reporte semanal — requiere tier pro |
+| `api/stripe.py` | Blueprint Stripe | `/stripe/create-checkout`, `/stripe/webhook` |
+| `api/helpers.py` | Helpers compartidos | `get_db()`, `require_premium()`, `require_pro()` — usados por todos los blueprints |
 | `frontend/dashboard.html` | Dashboard web | SPA vanilla HTML/CSS/JS — auth, indicadores técnicos, gestión de alertas, upgrade a Premium |
 
 ## Datos y outputs
@@ -146,7 +152,7 @@ api/            ← API Flask
 ```
 
 **Workers independientes:**
-- `python api/flask_app.py` — API REST (o gunicorn en producción)
+- `python api/flask_app.py` — API REST (o `gunicorn api.flask_app:app` en producción)
 - `python services/alerts_engine.py` — evaluación diaria de alertas
 
 ## Ejecución automática

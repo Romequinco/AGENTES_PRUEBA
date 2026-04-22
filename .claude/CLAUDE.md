@@ -81,7 +81,14 @@ Indicadores: `rsi`, `sma20`, `sma50`, `macd_histogram`, `price`. Operadores: `ab
 agents/              # Módulos Python de cada agente
 db/                  # Modelos SQLAlchemy (PostgreSQL)
 services/            # Email, análisis técnico, alertas, backtester, fundamentales, portfolio, reporter
-api/                 # API Flask (Fases 1-3)
+api/
+  flask_app.py       # App factory — solo registra blueprints, punto de entrada
+  helpers.py         # get_db(), require_premium(), require_pro() — compartidos
+  auth.py            # Blueprint /auth/*
+  newsletter.py      # Blueprint newsletter y endpoints públicos
+  premium.py         # Blueprint tier premium/pro
+  pro.py             # Blueprint tier pro exclusivo
+  stripe.py          # Blueprint /stripe/*
 tests/               # pytest — 48 tests (smoke + fase 3)
 data/                # Datos de mercado cacheados (raw/ y analysis/)
 output/              # Informes PDF diarios + reportes semanales PRO
