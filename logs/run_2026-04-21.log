@@ -115,3 +115,82 @@
 2026-04-21 16:47:37,070 [INFO] bolsa: [NEWSLETTER] JSON guardado: data/analysis\newsletter_2026-04-21.json
 2026-04-21 16:47:38,302 [INFO] bolsa.email_sender: [EMAIL] Batch enviado: 2 destinatarios (total acumulado: 2)
 2026-04-21 16:47:38,303 [INFO] bolsa: [NEWSLETTER] Enviado a 2 suscriptores.
+2026-04-21 20:34:39,349 [INFO] bolsa: === Inicio del pipeline IBEX 35 ===
+2026-04-21 20:34:42,597 [INFO] bolsa: Verificando composición actual del IBEX 35...
+2026-04-21 20:34:42,598 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-21, fuente: wikipedia)
+2026-04-21 20:34:42,598 [INFO] bolsa: IBEX 35 listo: 35 componentes (fuente: wikipedia, fecha: 2026-04-21)
+2026-04-21 20:34:42,600 [INFO] bolsa: [CLEAN] 8 fichero(s) del día 2026-04-21 eliminados antes de ejecutar.
+2026-04-21 20:34:43,027 [INFO] bolsa.leader: === Líder iniciando pipeline para 2026-04-21 ===
+2026-04-21 20:34:43,027 [INFO] bolsa.leader: [ 0/3 ] Cargando composición actual del IBEX 35...
+2026-04-21 20:34:43,028 [INFO] bolsa.ibex_data: IBEX 35: caché válida (2026-04-21, fuente: wikipedia)
+2026-04-21 20:34:43,028 [INFO] bolsa.leader: [ 0/3 ] IBEX 35: 35 componentes (fuente: wikipedia, fecha: 2026-04-21)
+2026-04-21 20:34:43,029 [INFO] bolsa.leader: [ 1/3 ] Ejecutando Researcher...
+2026-04-21 20:34:43,029 [INFO] bolsa.researcher: Researcher listo: 35 tickers (fuente: wikipedia, fecha: 2026-04-21)
+2026-04-21 20:34:43,029 [INFO] bolsa.researcher: Descargando precios e indicadores IBEX 35 para 2026-04-21 (35 tickers, 60d histórico)
+2026-04-21 20:35:00,103 [INFO] bolsa.researcher: Tickers con datos válidos: 35/35
+2026-04-21 20:35:00,107 [INFO] bolsa.researcher: Precios guardados en data/raw\ibex35_prices_2026-04-21.csv
+2026-04-21 20:35:00,109 [INFO] bolsa.researcher: Indicadores guardados en data/raw\ibex35_indicators_2026-04-21.json (35 tickers)
+2026-04-21 20:35:00,109 [INFO] bolsa.researcher: Descargando noticias RSS
+2026-04-21 20:35:00,713 [INFO] bolsa.researcher: Feed 'Expansion Mercados': 48 noticias
+2026-04-21 20:35:12,756 [WARNING] bolsa.researcher: Feed 'Cinco Dias Mercados' fallido: Feed malformado: <unknown>:2:3717: not well-formed (invalid token)
+2026-04-21 20:35:12,758 [INFO] bolsa.researcher: Noticias guardadas en data/raw\ibex35_news_2026-04-21.json (48 items)
+2026-04-21 20:35:15,526 [WARNING] bolsa.researcher: Macro ES10Y=X: sin datos suficientes
+2026-04-21 20:35:15,663 [WARNING] bolsa.researcher: Macro ES10Y=X usando proxy de Bono 10Y España (^TNX)
+2026-04-21 20:35:16,835 [WARNING] bolsa.researcher: Macro ^VSTOXX: sin datos suficientes
+2026-04-21 20:35:17,343 [WARNING] bolsa.researcher: Macro V2TX: sin datos suficientes
+2026-04-21 20:35:17,343 [WARNING] bolsa.researcher: Macro ^VSTOXX: sin datos disponibles (ni primario ni fallback)
+2026-04-21 20:35:17,344 [INFO] bolsa.researcher: Datos macro guardados en data/raw\macro_2026-04-21.json (12 indicadores)
+2026-04-21 20:35:19,421 [INFO] bolsa.researcher: Calendario económico guardado: data/raw\calendar_2026-04-21.json (95 eventos)
+2026-04-21 20:35:19,422 [INFO] bolsa.leader: [ 1/3 ] Researcher completado (ok)
+2026-04-21 20:35:19,422 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-21 20:37:15,913 [INFO] bolsa.analyst: Analyst respuesta: stop_reason=end_turn, content_blocks=1, chars=38752
+2026-04-21 20:37:15,913 [INFO] bolsa.analyst: Analyst primeros 300 chars: {
+  "market_summary": {
+    "ibex35_performance": "bajista",
+    "ibex35_change_pct": -0.65,
+    "ibex35_close_pts": 18142.6,
+    "market_sentiment": "negativo",
+    "volatility_level": "moderada",
+    "volume_vs_average": "normal",
+    "summary_text": "El IBEX 35 cerró con una corrección del 0,65% 
+2026-04-21 20:37:15,916 [INFO] bolsa.analyst: Análisis guardado en data/analysis\ibex35_analysis_2026-04-21.json
+2026-04-21 20:37:15,916 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-21 20:37:15,916 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-21 20:37:52,271 [INFO] bolsa.writer: Gráfico IBEX 52W generado: data/raw\charts_temp\ibex52w.png
+2026-04-21 20:37:52,301 [ERROR] bolsa.writer: Writer error inesperado: paraparser: syntax error: parse ended with 1 unclosed tags
+ para
+2026-04-21 20:37:52,302 [ERROR] bolsa.leader: Pipeline intento 1 fallido: Writer falló: ['paraparser: syntax error: parse ended with 1 unclosed tags\n para']
+2026-04-21 20:37:52,302 [INFO] bolsa.leader: Reintentando en 5s...
+2026-04-21 20:37:57,303 [INFO] bolsa.leader: [ 1/3 ] Researcher omitido (datos ya existentes)
+2026-04-21 20:37:57,303 [INFO] bolsa.leader: [ 2/3 ] Ejecutando Analyst...
+2026-04-21 20:39:46,357 [INFO] bolsa.analyst: Analyst respuesta: stop_reason=end_turn, content_blocks=1, chars=35771
+2026-04-21 20:39:46,357 [INFO] bolsa.analyst: Analyst primeros 300 chars: {
+  "market_summary": {
+    "ibex35_performance": "bajista",
+    "ibex35_change_pct": -0.65,
+    "ibex35_close_pts": 18142.6,
+    "market_sentiment": "negativo",
+    "volatility_level": "moderada",
+    "volume_vs_average": "normal",
+    "summary_text": "El IBEX 35 cerró con una corrección del 0,65%,
+2026-04-21 20:39:46,359 [INFO] bolsa.analyst: Análisis guardado en data/analysis\ibex35_analysis_2026-04-21.json
+2026-04-21 20:39:46,359 [INFO] bolsa.leader: [ 2/3 ] Analyst completado
+2026-04-21 20:39:46,360 [INFO] bolsa.leader: [ 3/3 ] Ejecutando Writer...
+2026-04-21 20:40:15,185 [WARNING] bolsa.writer: Writer: campo 'conclusion' reconstruido desde datos del análisis
+2026-04-21 20:40:16,274 [INFO] bolsa.writer: Gráfico IBEX 52W generado: data/raw\charts_temp\ibex52w.png
+2026-04-21 20:40:16,945 [INFO] bolsa.writer: PDF generado: output\informe_2026-04-21.pdf (472 KB)
+2026-04-21 20:40:16,947 [INFO] bolsa.leader: [ 3/3 ] Writer completado: output\informe_2026-04-21.pdf
+2026-04-21 20:40:16,948 [INFO] bolsa.leader: [ QA ] Validando output...
+2026-04-21 20:40:18,450 [INFO] bolsa.leader: [ QA ] Score: 92/100 — APPROVED
+2026-04-21 20:40:18,452 [INFO] bolsa.leader: === Resumen del pipeline ===
+  Estado:    SUCCESS
+  Fecha:     2026-04-21
+  PDF:       output\informe_2026-04-21.pdf
+  QA Score:  92/100
+  Tiempo:    335s
+  Errores:   ninguno
+2026-04-21 20:40:18,453 [INFO] bolsa.leader: Estado guardado en output\last_run.json
+2026-04-21 20:40:18,453 [INFO] bolsa: Pipeline completado. PDF: output\informe_2026-04-21.pdf
+2026-04-21 20:40:18,464 [INFO] bolsa: [NEWSLETTER] JSON guardado: data/analysis\newsletter_2026-04-21.json
+2026-04-21 20:40:19,959 [INFO] bolsa.email_sender: [EMAIL] Batch enviado: 2 destinatarios (total acumulado: 2)
+2026-04-21 20:40:19,960 [INFO] bolsa: [NEWSLETTER] Enviado a 2 suscriptores.

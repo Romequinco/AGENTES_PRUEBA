@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IBEX 35 · Dashboard Premium</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    header { background: #1a1a2e; color: #fff; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    header .badge { background: #f6c90e; color: #1a1a2e; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; text-transform: uppercase; }
+    header .user-info { font-size: 0.8rem; opacity: 0.7; }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+
+    .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 14px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+
+    /* Upgrade banner */
+    .upgrade-banner { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; border-radius: 10px; padding: 24px 20px; margin-bottom: 16px; text-align: center; }
+    .upgrade-banner h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .upgrade-banner p { font-size: 0.85rem; opacity: 0.8; margin-bottom: 16px; }
+    .btn-upgrade { background: #f6c90e; color: #1a1a2e; border: none; border-radius: 8px; padding: 12px 28px; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+    .btn-upgrade:hover { background: #e0b800; }
+
+    /* Auth */
+    .auth-section { max-width: 400px; margin: 40px auto; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: #555; }
+    .form-group input { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 0.9rem; }
+    .form-group input:focus { outline: none; border-color: #1a1a2e; }
+    .btn-primary { width: 100%; background: #1a1a2e; color: #fff; border: none; border-radius: 8px; padding: 11px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .btn-primary:hover { background: #16213e; }
+    .auth-toggle { text-align: center; margin-top: 14px; font-size: 0.85rem; color: #666; }
+    .auth-toggle a { color: #1a1a2e; cursor: pointer; text-decoration: underline; }
+
+    /* Technical analysis */
+    .symbol-row { display: flex; gap: 8px; margin-bottom: 14px; }
+    .symbol-row input { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 9px 12px; font-size: 0.9rem; text-transform: uppercase; }
+    .symbol-row input:focus { outline: none; border-color: #1a1a2e; }
+    .btn-search { background: #1a1a2e; color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-weight: 600; cursor: pointer; }
+    .indicators-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .indicator { background: #f8f9fa; border-radius: 8px; padding: 12px; text-align: center; }
+    .indicator .label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+    .indicator .value { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+    .indicator .value.up { color: #22a55a; }
+    .indicator .value.down { color: #e03131; }
+    .indicator .value.neutral { color: #1a1a2e; }
+
+    /* Alerts */
+    .alert-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 16px; }
+    @media (max-width: 600px) { .alert-form { grid-template-columns: 1fr 1fr; } }
+    .alert-form select, .alert-form input[type="text"], .alert-form input[type="number"] {
+      border: 1px solid #ddd; border-radius: 6px; padding: 9px 10px; font-size: 0.85rem; width: 100%;
+    }
+    .alert-form select:focus, .alert-form input:focus { outline: none; border-color: #1a1a2e; }
+    .btn-add { background: #22a55a; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .alert-list { list-style: none; }
+    .alert-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 7px; background: #f8f9fa; margin-bottom: 6px; font-size: 0.85rem; }
+    .alert-item .tag { background: #e9ecef; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; margin-right: 6px; }
+    .btn-del { background: none; border: 1px solid #ddd; border-radius: 5px; color: #999; cursor: pointer; padding: 3px 9px; font-size: 0.75rem; }
+    .btn-del:hover { background: #fee; border-color: #fcc; color: #c00; }
+
+    .empty-state { text-align: center; color: #aaa; padding: 24px; font-size: 0.85rem; }
+    .msg-error { color: #c00; font-size: 0.82rem; margin-top: 8px; }
+    .msg-ok { color: #22a55a; font-size: 0.82rem; margin-top: 8px; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #1a1a2e; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>IBEX 35 · Dashboard</h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="badge" id="tier-badge" style="display:none">Premium</span>
+    <span class="user-info" id="user-email"></span>
+    <button id="btn-logout" style="display:none;background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:0.8rem" onclick="logout()">Salir</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- AUTH (visible cuando no hay sesión) -->
+  <div id="auth-section" class="auth-section card" style="display:none">
+    <h2 id="auth-title">Iniciar sesión</h2>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="tu@email.com">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="auth-password" placeholder="••••••••">
+    </div>
+    <div id="auth-msg"></div>
+    <br>
+    <button class="btn-primary" onclick="submitAuth()">Entrar</button>
+    <div class="auth-toggle">
+      <span id="auth-switch-text">¿No tienes cuenta?</span>
+      <a onclick="toggleAuthMode()"> <span id="auth-switch-link">Regístrate</span></a>
+    </div>
+  </div>
+
+  <!-- UPGRADE BANNER (visible si tier=free) -->
+  <div id="upgrade-banner" class="upgrade-banner" style="display:none">
+    <h2>Desbloquea el análisis técnico y alertas</h2>
+    <p>Accede a indicadores en tiempo real (RSI, MACD, Bandas de Bollinger) y alertas automáticas por email para tus acciones del IBEX 35.</p>
+    <button class="btn-upgrade" onclick="createCheckout()">Actualizar a Premium →</button>
+    <p id="checkout-msg" style="margin-top:10px;font-size:0.8rem;opacity:.8"></p>
+  </div>
+
+  <!-- TECHNICAL ANALYSIS -->
+  <div id="technical-section" class="card" style="display:none">
+    <h2>Análisis técnico en tiempo real</h2>
+    <div class="symbol-row">
+      <input type="text" id="symbol-input" placeholder="Ej: SAN.MC, BBVA.MC" maxlength="20" onkeydown="if(event.key==='Enter')fetchTechnical()">
+      <button class="btn-search" onclick="fetchTechnical()">Analizar</button>
+    </div>
+    <div id="technical-result"></div>
+  </div>
+
+  <!-- ALERTS -->
+  <div id="alerts-section" class="card" style="display:none">
+    <h2>Mis alertas</h2>
+    <div class="alert-form">
+      <input type="text" id="new-symbol" placeholder="SAN.MC" maxlength="20" style="text-transform:uppercase">
+      <select id="new-condition">
+        <option value="price_above">Precio &gt;</option>
+        <option value="price_below">Precio &lt;</option>
+        <option value="rsi_above">RSI &gt;</option>
+        <option value="rsi_below">RSI &lt;</option>
+      </select>
+      <input type="number" id="new-value" placeholder="Valor" step="any">
+      <button class="btn-add" onclick="createAlert()">+ Añadir</button>
+    </div>
+    <div id="alert-msg"></div>
+    <ul class="alert-list" id="alert-list"></ul>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+let authMode = 'login'; // 'login' | 'register'
+
+// ---------- Token helpers ----------
+function getToken() { return localStorage.getItem('jwt'); }
+function setToken(t) { localStorage.setItem('jwt', t); }
+function clearToken() { localStorage.removeItem('jwt'); localStorage.removeItem('user'); }
+
+function getUser() {
+  try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
+}
+function setUser(u) { localStorage.setItem('user', JSON.stringify(u)); }
+
+// ---------- Init ----------
+window.onload = function() {
+  const token = getToken();
+  if (token) {
+    const user = getUser();
+    showDashboard(user);
+  } else {
+    showAuth();
+  }
+};
+
+function showAuth() {
+  document.getElementById('auth-section').style.display = 'block';
+  document.getElementById('upgrade-banner').style.display = 'none';
+  document.getElementById('technical-section').style.display = 'none';
+  document.getElementById('alerts-section').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+  document.getElementById('tier-badge').style.display = 'none';
+  document.getElementById('user-email').textContent = '';
+}
+
+function showDashboard(user) {
+  document.getElementById('auth-section').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'inline-block';
+  if (user) {
+    document.getElementById('user-email').textContent = user.email;
+    const badge = document.getElementById('tier-badge');
+    if (user.tier === 'premium' || user.tier === 'pro') {
+      badge.style.display = 'inline-block';
+      badge.textContent = user.tier.toUpperCase();
+      document.getElementById('upgrade-banner').style.display = 'none';
+      document.getElementById('technical-section').style.display = 'block';
+      document.getElementById('alerts-section').style.display = 'block';
+      loadAlerts();
+    } else {
+      badge.style.display = 'none';
+      document.getElementById('upgrade-banner').style.display = 'block';
+      document.getElementById('technical-section').style.display = 'none';
+      document.getElementById('alerts-section').style.display = 'none';
+    }
+  }
+}
+
+function logout() {
+  clearToken();
+  showAuth();
+}
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'register' : 'login';
+  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
+  document.getElementById('auth-switch-text').textContent = authMode === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?';
+  document.getElementById('auth-switch-link').textContent = authMode === 'login' ? 'Regístrate' : 'Inicia sesión';
+  document.getElementById('auth-msg').textContent = '';
+}
+
+// ---------- Auth ----------
+async function submitAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const msgEl = document.getElementById('auth-msg');
+  msgEl.textContent = '';
+
+  const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+  try {
+    const r = await fetch(API + endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password})
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      msgEl.className = 'msg-error';
+      msgEl.textContent = data.error || 'Error desconocido';
+      return;
+    }
+    setToken(data.access_token);
+    setUser({id: data.id, email: data.email, tier: data.tier});
+    showDashboard(data);
+  } catch(e) {
+    msgEl.className = 'msg-error';
+    msgEl.textContent = 'Error de red';
+  }
+}
+
+// ---------- Technical ----------
+async function fetchTechnical() {
+  const symbol = document.getElementById('symbol-input').value.trim().toUpperCase();
+  const resultEl = document.getElementById('technical-result');
+  if (!symbol) return;
+  resultEl.innerHTML = '<span class="spinner"></span> Calculando...';
+  try {
+    const r = await fetch(API + '/api/v1/technical/' + encodeURIComponent(symbol), {
+      headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    const data = await r.json();
+    if (!r.ok) { resultEl.innerHTML = `<p class="msg-error">${data.error || 'Error'}</p>`; return; }
+    resultEl.innerHTML = renderIndicators(data);
+  } catch(e) {
+    resultEl.innerHTML = '<p class="msg-error">Error de red</p>';
+  }
+}
+
+function renderIndicators(d) {
+  const fmt = v => v != null ? v.toFixed(2) : 'N/A';
+  const rsiClass = d.rsi14 == null ? 'neutral' : d.rsi14 > 70 ? 'down' : d.rsi14 < 30 ? 'up' : 'neutral';
+  const macdClass = d.macd_histogram == null ? 'neutral' : d.macd_histogram > 0 ? 'up' : 'down';
+  const priceVsSma = d.current_price != null && d.sma20 != null ? (d.current_price >= d.sma20 ? 'up' : 'down') : 'neutral';
+
+  return `<div class="indicators-grid">
+    <div class="indicator"><div class="label">Precio</div><div class="value ${priceVsSma}">${fmt(d.current_price)}</div></div>
+    <div class="indicator"><div class="label">SMA 20</div><div class="value neutral">${fmt(d.sma20)}</div></div>
+    <div class="indicator"><div class="label">SMA 50</div><div class="value neutral">${fmt(d.sma50)}</div></div>
+    <div class="indicator"><div class="label">RSI 14</div><div class="value ${rsiClass}">${fmt(d.rsi14)}</div></div>
+    <div class="indicator"><div class="label">MACD</div><div class="value ${macdClass}">${fmt(d.macd_line)}</div></div>
+    <div class="indicator"><div class="label">Señal MACD</div><div class="value neutral">${fmt(d.signal_line)}</div></div>
+    <div class="indicator"><div class="label">Soporte</div><div class="value neutral">${fmt(d.support)}</div></div>
+    <div class="indicator"><div class="label">Resistencia</div><div class="value neutral">${fmt(d.resistance)}</div></div>
+  </div>`;
+}
+
+// ---------- Alerts ----------
+async function loadAlerts() {
+  const listEl = document.getElementById('alert-list');
+  listEl.innerHTML = '<li style="color:#aaa;font-size:.85rem;padding:8px"><span class="spinner"></span> Cargando...</li>';
+  try {
+    const r = await fetch(API + '/api/v1/alerts', {
+      headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    const data = await r.json();
+    if (!r.ok) { listEl.innerHTML = `<li class="empty-state">${data.error || 'Error'}</li>`; return; }
+    if (!data.length) { listEl.innerHTML = '<li class="empty-state">No tienes alertas activas</li>'; return; }
+    listEl.innerHTML = data.map(a => `
+      <li class="alert-item">
+        <div>
+          <span class="tag">${a.symbol}</span>
+          <span class="tag">${conditionLabel(a.condition_type)}</span>
+          <strong>${a.condition_value}</strong>
+        </div>
+        <button class="btn-del" onclick="deleteAlert(${a.id})">Eliminar</button>
+      </li>`).join('');
+  } catch(e) {
+    listEl.innerHTML = '<li class="empty-state">Error de red</li>';
+  }
+}
+
+function conditionLabel(ct) {
+  return {price_above:'Precio >', price_below:'Precio <', rsi_above:'RSI >', rsi_below:'RSI <'}[ct] || ct;
+}
+
+async function createAlert() {
+  const symbol = document.getElementById('new-symbol').value.trim().toUpperCase();
+  const condition_type = document.getElementById('new-condition').value;
+  const condition_value = parseFloat(document.getElementById('new-value').value);
+  const msgEl = document.getElementById('alert-msg');
+  msgEl.textContent = '';
+
+  if (!symbol || isNaN(condition_value)) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Completa todos los campos'; return;
+  }
+
+  try {
+    const r = await fetch(API + '/api/v1/alerts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken()},
+      body: JSON.stringify({symbol, condition_type, condition_value})
+    });
+    const data = await r.json();
+    if (!r.ok) { msgEl.className = 'msg-error'; msgEl.textContent = data.error || 'Error'; return; }
+    msgEl.className = 'msg-ok'; msgEl.textContent = 'Alerta creada';
+    document.getElementById('new-symbol').value = '';
+    document.getElementById('new-value').value = '';
+    loadAlerts();
+  } catch(e) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Error de red';
+  }
+}
+
+async function deleteAlert(id) {
+  if (!confirm('¿Eliminar esta alerta?')) return;
+  try {
+    const r = await fetch(API + '/api/v1/alerts/' + id, {
+      method: 'DELETE',
+      headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    if (r.ok) loadAlerts();
+  } catch(e) {}
+}
+
+// ---------- Stripe ----------
+async function createCheckout() {
+  const msgEl = document.getElementById('checkout-msg');
+  msgEl.textContent = 'Redirigiendo a pago...';
+  try {
+    const r = await fetch(API + '/stripe/create-checkout', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    const data = await r.json();
+    if (!r.ok) { msgEl.textContent = data.error || 'Error'; return; }
+    window.location.href = data.checkout_url;
+  } catch(e) {
+    msgEl.textContent = 'Error de red';
+  }
+}
+</script>
+</body>
+</html>

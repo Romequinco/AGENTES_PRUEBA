@@ -19,3 +19,9 @@ psycopg2-binary>=2.9.9
 Flask>=3.0.0
 Werkzeug>=3.0.0
 sendgrid>=6.11.0
+
+# Auth / Pagos / Alertas (Fase 2)
+flask-jwt-extended>=4.6.0
+bcrypt>=4.1.0
+stripe>=9.0.0
+apscheduler>=3.10.0

@@ -84,6 +84,56 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 010 — JWT con flask-jwt-extended (no sesiones de servidor)
+
+**Decisión:** Auth basada en JWT stateless. El servidor no guarda sesiones — cada request incluye el token en `Authorization: Bearer <token>`.
+
+**Por qué:** La API corre en Railway como proceso stateless. Las sesiones de servidor requieren almacenamiento compartido (Redis o DB) entre workers. JWT elimina esa dependencia y escala horizontalmente sin configuración extra.
+
+**Cómo aplicar:** `JWT_SECRET_KEY` debe tener al menos 32 chars. Si se cambia la clave, todos los tokens existentes quedan invalidados — avisar a los usuarios antes de rotar en producción.
+
+---
+
+## 011 — bcrypt para hashes de contraseña (no werkzeug)
+
+**Decisión:** Fase 2 usa `bcrypt` directamente en lugar de `werkzeug.security.generate_password_hash`.
+
+**Por qué:** bcrypt tiene factor de trabajo configurable y es el estándar de la industria para contraseñas. werkzeug usa PBKDF2 por defecto, que es aceptable pero bcrypt es más resistente a ataques de GPU. El endpoint `/register` de Fase 1 sigue usando werkzeug por compatibilidad con usuarios ya registrados.
+
+**Cómo aplicar:** Los usuarios de Fase 1 (hash werkzeug) y Fase 2 (hash bcrypt) coexisten en la misma tabla. El login detecta el formato automáticamente porque los prefijos son distintos (`pbkdf2:sha256:...` vs `$2b$...`). Nota: si se migran usuarios, hay que rehashear en el primer login.
+
+---
+
+## 012 — Stripe webhooks como fuente de verdad del tier
+
+**Decisión:** El tier del usuario se actualiza **únicamente** a través del webhook `checkout.session.completed`, nunca por el redirect de éxito del checkout.
+
+**Por qué:** El redirect de éxito puede no ejecutarse (usuario cierra el navegador, fallo de red). El webhook es fiable y llega siempre. Confiar en el redirect como fuente de verdad genera usuarios que pagaron pero siguen en `free`.
+
+**Cómo aplicar:** El `user_id` se incluye en `metadata` al crear la sesión de checkout. El webhook lo lee, busca al usuario en la DB y actualiza `tier` y la tabla `subscriptions`. El redirect de éxito solo muestra una pantalla de confirmación, no tiene lógica de negocio.
+
+---
+
+## 013 — APScheduler con SQLAlchemy job store para el motor de alertas
+
+**Decisión:** `alerts_engine.py` usa APScheduler con job store en la misma PostgreSQL, no `schedule` con `while True`.
+
+**Por qué:** Un `while True` + `time.sleep()` muere silenciosamente en Railway sin que nadie lo sepa — el proceso crashea y no hay reinicio automático. APScheduler con SQLAlchemy job store persiste los jobs en la DB, sobrevive reinicios y Railway puede gestionar el proceso como worker con restart policy.
+
+**Cómo aplicar:** Arrancar como proceso separado: `python services/alerts_engine.py`. En Railway, añadir como segundo servicio (worker) en el mismo proyecto, con la misma `DATABASE_URL`.
+
+---
+
+## 014 — StripeObject no es un dict — usar json.loads(str(obj))
+
+**Decisión:** En `_handle_stripe_event`, el objeto del evento se convierte con `json.loads(str(obj))` antes de usar `.get()`.
+
+**Por qué:** `stripe.Webhook.construct_event()` devuelve un `StripeObject`, no un dict Python. Llamar `.get()` sobre él lanza `AttributeError`. La conversión via `str()` + `json.loads()` produce un dict plano estándar.
+
+**Alternativa descartada:** Acceder con `obj["key"]` directamente — funciona para claves que existen pero sigue lanzando `KeyError` para opcionales, haciendo el código frágil.
+
+---
+
 ## 009 — SendGrid Personalizations API (batch, no loop)
 
 **Decisión:** `send_bulk_newsletter()` construye un único payload con todas las `personalizations` y hace un solo request HTTP, no un loop de `send_per_user`.

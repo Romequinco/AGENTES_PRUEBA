@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean,
-    DateTime, ForeignKey, Enum as SAEnum,
+    DateTime, Float, ForeignKey, Enum as SAEnum,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
@@ -36,6 +36,8 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     subscription = relationship("NewsletterSubscriber", back_populates="user", uselist=False)
+    stripe_subscription = relationship("Subscription", back_populates="user", uselist=False)
+    alerts = relationship("Alert", back_populates="user")
 
 
 class NewsletterSubscriber(Base):
@@ -47,6 +49,38 @@ class NewsletterSubscriber(Base):
     subscribed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="subscription")
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    stripe_customer_id = Column(String(128), nullable=True, index=True)
+    stripe_subscription_id = Column(String(128), nullable=True, index=True)
+    tier = Column(SAEnum("free", "premium", "pro", name="sub_tier"), nullable=False, default="free")
+    status = Column(SAEnum("active", "cancelled", "past_due", name="sub_status"), nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="stripe_subscription")
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    symbol = Column(String(20), nullable=False)
+    condition_type = Column(
+        SAEnum("price_above", "price_below", "rsi_above", "rsi_below", name="alert_condition"),
+        nullable=False,
+    )
+    condition_value = Column(Float, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    triggered_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="alerts")
 
 
 def create_tables():

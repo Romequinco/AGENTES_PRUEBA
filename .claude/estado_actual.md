@@ -1,6 +1,6 @@
 # Estado actual del sistema
 
-> Última actualización: 2026-04-21
+> Última actualización: 2026-04-22
 
 ## Estado general: FUNCIONAL
 
@@ -32,9 +32,42 @@ El pipeline completo está operativo. GitHub Actions ejecuta el sistema diariame
 - Base de datos PostgreSQL local creada (`ibex_newsletter`) y tablas inicializadas
 - Verificado end-to-end: PDF generado + newsletter JSON guardado + email enviado via SendGrid
 
+## Trabajo reciente completado (sesión 2026-04-22 — Fase 2 Premium)
+
+- `requirements.txt` — añadidos: flask-jwt-extended, bcrypt, stripe, apscheduler
+- `db/models.py` — nuevas tablas: `subscriptions` (Stripe), `alerts` (alertas técnicas); relaciones inversas en `User`
+- `services/technical_analyzer.py` — nuevo: `analyze(symbol)` → SMA20, SMA50, RSI14, MACD, soporte, resistencia via yfinance
+- `services/alerts_engine.py` — nuevo: worker APScheduler con SQLAlchemy job store; evalúa alertas a las 17:35 Madrid; falla claro si faltan env vars
+- `api/flask_app.py` — ampliado con: auth JWT (`/auth/register`, `/auth/login`), endpoints PREMIUM protegidos (alertas, análisis técnico), webhooks Stripe (checkout.session.completed, subscription.deleted, invoice.payment_failed)
+- `frontend/dashboard.html` — nuevo: SPA vanilla HTML/CSS/JS con auth, indicadores técnicos, gestión de alertas, botón de upgrade a Stripe
+
+## Estado verificado end-to-end (sesión 2026-04-22)
+
+Todos los endpoints de Fase 2 probados manualmente en local:
+
+| Endpoint | Resultado |
+|---|---|
+| `POST /auth/register` | 201 + JWT |
+| `POST /auth/login` | 200 + JWT |
+| `GET /api/v1/technical/SAN.MC` | 200 + indicadores reales de yfinance |
+| `POST /api/v1/alerts` | 201 + alerta creada en DB |
+| `GET /api/v1/alerts` | 200 + lista de alertas |
+| `POST /stripe/create-checkout` | 200 + URL de checkout real |
+| Webhook `checkout.session.completed` | 200 + tier→premium en DB |
+| DB tras pago | `tier: premium`, `status: active`, `stripe_subscription_id` guardado |
+
 ## Pendiente / Próximos pasos
 
-- **Fase 2:** Stripe (pagos), auth JWT, dashboard premium, alertas por ticker
+- **Dashboard:** probar `frontend/dashboard.html` en el navegador con flujo completo de UI
+- **Deploy Railway:** añadir las 4 variables nuevas de Fase 2 en el panel de Railway y configurar webhook real de Stripe apuntando al dominio de producción
+- **Motor de alertas:** añadir como worker en Railway (`python services/alerts_engine.py`)
+- **Fase 3:** backtester, fundamental_analyzer, portfolio_tracker, tier PRO
+
+## Limitaciones conocidas (Fase 2)
+
+- El `/register` legacy (Fase 1) usa werkzeug para el hash; `/auth/register` usa bcrypt — coexisten sin problema pero login detecta el formato del hash automáticamente
+- `STRIPE_WEBHOOK_SECRET` cambia cada vez que arranca el proxy local de Stripe CLI — en producción es fijo (configurado en el dashboard de Stripe)
+- El motor de alertas necesita `DATABASE_URL` y `SENDGRID_API_KEY` para arrancar — falla con error claro si faltan
 - Las carpetas `.claude/agents/`, `.claude/skills/` y `.claude/hooks/` están vacías — los agentes Claude están implementados como módulos Python en `agents/`, no como definiciones `.md`
 - No hay tests automatizados del output del informe (solo tests del código en `tests/`)
 - Añadir test de humo para `generate_newsletter_data()` y el endpoint `/api/v1/newsletter/latest`
