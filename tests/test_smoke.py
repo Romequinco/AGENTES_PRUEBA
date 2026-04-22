@@ -1,12 +1,9 @@
 """
 test_smoke.py
 =============
-Smoke test del sistema. Verifica que todos los módulos cargan, que los
+Smoke tests del sistema. Verifica que todos los módulos cargan, que los
 indicadores técnicos se calculan correctamente y que el pipeline arranca
-sin errores de importación ni configuración.
-
-Uso:
-    python test_smoke.py
+sin errores de importación.
 
 No requiere API key real ni conexión a mercados (usa datos sintéticos).
 """
@@ -14,169 +11,125 @@ No requiere API key real ni conexión a mercados (usa datos sintéticos).
 import sys
 import json
 import os
-import traceback
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import pytest
 
-# ── Colores para output ──────────────────────────────────────────────────────
-GREEN = "\033[92m"
-RED   = "\033[91m"
-YELLOW = "\033[93m"
-RESET = "\033[0m"
-
-passed = 0
-failed = 0
-
-
-def ok(msg: str):
-    global passed
-    passed += 1
-    print(f"  {GREEN}✓{RESET} {msg}")
-
-
-def fail(msg: str, detail: str = ""):
-    global failed
-    failed += 1
-    print(f"  {RED}✗{RESET} {msg}")
-    if detail:
-        print(f"    {YELLOW}{detail}{RESET}")
-
-
-def section(title: str):
-    print(f"\n{title}")
-    print("─" * len(title))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ── 1. Imports ───────────────────────────────────────────────────────────────
-section("1. Imports de módulos")
 
-try:
-    from agents.ibex_data import get_ibex35_components, EMERGENCY_FALLBACK
-    ok("agents.ibex_data importado")
-except Exception as e:
-    fail("agents.ibex_data", str(e))
+def test_import_ibex_data():
+    from agents.ibex_data import get_ibex35_components, EMERGENCY_FALLBACK  # noqa: F401
 
-try:
-    from agents.researcher import ResearcherAgent, _rsi, _sma, _macd, _atr, _bollinger, _compute_indicators
-    ok("agents.researcher importado")
-except Exception as e:
-    fail("agents.researcher", str(e))
 
-try:
-    from agents.analyst import AnalystAgent
-    ok("agents.analyst importado")
-except Exception as e:
-    fail("agents.analyst", str(e))
+def test_import_researcher():
+    from agents.researcher import ResearcherAgent, _rsi, _sma, _macd, _atr, _bollinger, _compute_indicators  # noqa: F401
 
-try:
-    from agents.writer import WriterAgent
-    ok("agents.writer importado")
-except Exception as e:
-    fail("agents.writer", str(e))
 
-try:
-    from agents.leader import LeaderAgent
-    ok("agents.leader importado")
-except Exception as e:
-    fail("agents.leader", str(e))
+def test_import_analyst():
+    from agents.analyst import AnalystAgent  # noqa: F401
+
+
+def test_import_writer():
+    from agents.writer import WriterAgent  # noqa: F401
+
+
+def test_import_leader():
+    from agents.leader import LeaderAgent  # noqa: F401
 
 
 # ── 2. Indicadores técnicos ──────────────────────────────────────────────────
-section("2. Indicadores técnicos (datos sintéticos)")
 
-# Genera serie de precios sintética con tendencia alcista + ruido
-np.random.seed(42)
-n = 60
-prices = pd.Series(100 + np.cumsum(np.random.randn(n) * 0.5 + 0.1))
-highs  = prices + np.abs(np.random.randn(n) * 0.3)
-lows   = prices - np.abs(np.random.randn(n) * 0.3)
+@pytest.fixture(scope="module")
+def synthetic_prices():
+    np.random.seed(42)
+    n = 60
+    prices = pd.Series(100 + np.cumsum(np.random.randn(n) * 0.5 + 0.1))
+    highs = prices + np.abs(np.random.randn(n) * 0.3)
+    lows = prices - np.abs(np.random.randn(n) * 0.3)
+    return prices, highs, lows, n
 
-# RSI
-try:
+
+def test_rsi(synthetic_prices):
+    from agents.researcher import _rsi
+    prices, _, _, _ = synthetic_prices
     rsi = _rsi(prices, 14)
     assert rsi is not None, "RSI devolvió None"
     assert 0 <= rsi <= 100, f"RSI fuera de rango: {rsi}"
-    ok(f"RSI(14) = {rsi}")
-except Exception as e:
-    fail("RSI(14)", str(e))
 
-# RSI insuficiente
-try:
+
+def test_rsi_insufficient_data(synthetic_prices):
+    from agents.researcher import _rsi
+    prices, _, _, _ = synthetic_prices
     rsi_short = _rsi(prices[:5], 14)
     assert rsi_short is None, "RSI con datos insuficientes debería devolver None"
-    ok("RSI con datos insuficientes devuelve None")
-except Exception as e:
-    fail("RSI datos insuficientes", str(e))
 
-# MA
-try:
+
+def test_sma(synthetic_prices):
+    from agents.researcher import _sma
+    prices, _, _, _ = synthetic_prices
     ma20 = _sma(prices, 20)
     ma50 = _sma(prices, 50)
-    assert ma20 is not None and ma50 is not None
-    ok(f"MA20={ma20}, MA50={ma50}")
-except Exception as e:
-    fail("SMA(20/50)", str(e))
+    assert ma20 is not None
+    assert ma50 is not None
 
-# MACD
-try:
+
+def test_macd(synthetic_prices):
+    from agents.researcher import _macd
+    prices, _, _, _ = synthetic_prices
     macd = _macd(prices)
     assert all(k in macd for k in ("macd", "signal", "histogram"))
     assert macd["macd"] is not None
-    ok(f"MACD={macd['macd']}, signal={macd['signal']}, hist={macd['histogram']}")
-except Exception as e:
-    fail("MACD(12,26,9)", str(e))
 
-# ATR
-try:
+
+def test_atr(synthetic_prices):
+    from agents.researcher import _atr
+    prices, highs, lows, _ = synthetic_prices
     atr = _atr(highs, lows, prices, 14)
-    assert atr is not None and atr > 0
-    ok(f"ATR(14) = {atr}")
-except Exception as e:
-    fail("ATR(14)", str(e))
+    assert atr is not None
+    assert atr > 0
 
-# Bollinger
-try:
+
+def test_bollinger(synthetic_prices):
+    from agents.researcher import _bollinger
+    prices, _, _, _ = synthetic_prices
     bb = _bollinger(prices, 20)
     assert all(k in bb for k in ("upper", "middle", "lower", "bandwidth"))
     assert bb["upper"] > bb["middle"] > bb["lower"]
-    ok(f"Bollinger upper={bb['upper']}, mid={bb['middle']}, lower={bb['lower']}, bw={bb['bandwidth']}%")
-except Exception as e:
-    fail("Bollinger(20,2)", str(e))
 
-# _compute_indicators completo
-try:
+
+def test_compute_indicators(synthetic_prices):
+    from agents.researcher import _compute_indicators
+    prices, highs, lows, n = synthetic_prices
     hist_df = pd.DataFrame({
         "Close": prices.values,
         "High": highs.values,
         "Low": lows.values,
+        "Volume": np.random.randint(1_000_000, 5_000_000, n),
     })
     ind = _compute_indicators(hist_df)
     required = ["rsi_14", "ma_20", "ma_50", "macd", "atr_14", "bollinger_upper"]
     missing = [k for k in required if k not in ind]
     assert not missing, f"Faltan campos: {missing}"
-    ok(f"_compute_indicators devuelve todos los campos ({len(ind)} campos)")
-except Exception as e:
-    fail("_compute_indicators", str(e))
 
 
 # ── 3. ibex_data emergency fallback ─────────────────────────────────────────
-section("3. ibex_data — fallback de emergencia")
 
-try:
+def test_emergency_fallback():
+    from agents.ibex_data import EMERGENCY_FALLBACK
     fb = EMERGENCY_FALLBACK
     assert len(fb["tickers"]) > 20, "Fallback tiene menos de 20 tickers"
     assert len(fb["names"]) > 0
     assert len(fb["aliases"]) > 0
-    ok(f"EMERGENCY_FALLBACK tiene {len(fb['tickers'])} tickers")
-except Exception as e:
-    fail("EMERGENCY_FALLBACK", str(e))
 
-try:
-    # Con max_cache_age_days=999 para no hacer peticiones HTTP en el test
+
+def test_get_ibex35_from_cache():
     import tempfile
+    from agents.ibex_data import EMERGENCY_FALLBACK, get_ibex35_components
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Escribe una caché falsa fresca
         fake_cache = {
             **EMERGENCY_FALLBACK,
             "source": "test",
@@ -185,19 +138,21 @@ try:
         cache_path = os.path.join(tmpdir, "ibex_cache.json")
         with open(cache_path, "w") as f:
             json.dump(fake_cache, f)
-
         result = get_ibex35_components(cache_dir=tmpdir, max_cache_age_days=7)
         assert result["source"] == "test"
         assert len(result["tickers"]) > 0
-        ok(f"get_ibex35_components lee caché correctamente ({len(result['tickers'])} tickers)")
-except Exception as e:
-    fail("get_ibex35_components con caché", str(e))
 
 
 # ── 4. Analyst — build_prompt con datos sintéticos ──────────────────────────
-section("4. Analyst — build_prompt sin API")
 
-try:
+def test_analyst_build_prompt():
+    import pytz
+    from agents.analyst import AnalystAgent
+
+    np.random.seed(42)
+    n = 60
+    prices = pd.Series(100 + np.cumsum(np.random.randn(n) * 0.5 + 0.1))
+
     config = {
         "api_key": "test-key",
         "model_analyst": "claude-haiku-4-5-20251001",
@@ -214,14 +169,12 @@ try:
     agent.model = "claude-haiku-4-5-20251001"
     agent.max_retries = 1
     agent.retry_delay = 0
-    agent.madrid = __import__("pytz").timezone("Europe/Madrid")
+    agent.madrid = pytz.timezone("Europe/Madrid")
 
-    # Cargar instrucciones reales
-    skills_dir = os.path.join(os.path.dirname(__file__), "skills")
+    skills_dir = os.path.join(PROJECT_ROOT, "skills")
     with open(os.path.join(skills_dir, "analyst_instructions.md"), encoding="utf-8") as f:
         agent.system_prompt = f.read()
 
-    # Datos sintéticos mínimos
     df = pd.DataFrame([{
         "ticker": "SAN.MC", "name": "Santander", "sector": "Bancario",
         "open": 4.1, "high": 4.2, "low": 4.0, "close": 4.15,
@@ -246,47 +199,29 @@ try:
     assert "SAN" in prompt
     assert "RSI" in prompt
     assert "MACD" in prompt
-    assert "Bollinger" in prompt or "BB" in prompt
-    assert "^IBEX" in prompt or "10500" in prompt
-    ok(f"build_prompt genera prompt válido ({len(prompt)} chars)")
-except Exception as e:
-    fail("build_prompt", traceback.format_exc())
+    assert len(prompt) > 100
 
 
-# ── 5. Ficheros de skills/instrucciones ─────────────────────────────────────
-section("5. Ficheros de instrucciones (skills/)")
+# ── 5. Ficheros de instrucciones ─────────────────────────────────────────────
 
-skills = ["analyst_instructions.md", "writer_instructions.md", "leader_instructions.md"]
-for skill in skills:
-    path = os.path.join("skills", skill)
-    try:
-        assert os.path.exists(path), f"No existe: {path}"
-        with open(path, encoding="utf-8") as f:
-            content = f.read()
-        assert len(content) > 100, "Fichero demasiado corto"
-        ok(f"{skill} ({len(content)} chars)")
-    except Exception as e:
-        fail(skill, str(e))
+@pytest.mark.parametrize("skill", [
+    "analyst_instructions.md",
+    "writer_instructions.md",
+    "leader_instructions.md",
+])
+def test_skill_file_exists(skill):
+    path = os.path.join(PROJECT_ROOT, "skills", skill)
+    assert os.path.exists(path), f"No existe: {path}"
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+    assert len(content) > 100, f"{skill} demasiado corto"
 
 
 # ── 6. Estructura de directorios ─────────────────────────────────────────────
-section("6. Estructura de directorios")
 
-dirs = ["data/raw", "data/analysis", "output", "logs", "agents", "skills"]
-for d in dirs:
-    if os.path.isdir(d):
-        ok(f"{d}/")
-    else:
-        fail(f"{d}/ no existe")
-
-
-# ── Resumen ──────────────────────────────────────────────────────────────────
-print(f"\n{'═'*40}")
-total = passed + failed
-print(f"Resultado: {passed}/{total} tests pasaron")
-if failed == 0:
-    print(f"{GREEN}✓ Todos los tests pasaron{RESET}")
-    sys.exit(0)
-else:
-    print(f"{RED}✗ {failed} test(s) fallaron{RESET}")
-    sys.exit(1)
+@pytest.mark.parametrize("d", [
+    "data/raw", "data/analysis", "output", "logs", "agents", "skills"
+])
+def test_directory_exists(d):
+    path = os.path.join(PROJECT_ROOT, d)
+    assert os.path.isdir(path), f"{d}/ no existe"

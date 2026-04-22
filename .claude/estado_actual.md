@@ -56,12 +56,26 @@ Todos los endpoints de Fase 2 probados manualmente en local:
 | Webhook `checkout.session.completed` | 200 + tier→premium en DB |
 | DB tras pago | `tier: premium`, `status: active`, `stripe_subscription_id` guardado |
 
+## Trabajo reciente completado (sesión 2026-04-22 — Fase 3 PRO)
+
+- `tests/conftest.py` — añadido: add project root to sys.path para pytest
+- `tests/test_smoke.py` — reescrito: funciones pytest propias (era script standalone con sys.exit)
+- `tests/test_phase3.py` — nuevo: 24 tests unitarios (backtester, fundamental_analyzer)
+- `db/models.py` — ampliado: tablas `strategies`, `backtest_results`, `portfolios`, `portfolio_positions`
+- `services/backtester.py` — nuevo: backtest determinista, estrategias JSON, indicadores vectorizados
+- `services/fundamental_analyzer.py` — nuevo: fundamental_data() + data_quality_score()
+- `services/portfolio_tracker.py` — nuevo: add_position, close_position, portfolio_summary con P&L y benchmark IBEX
+- `services/reporter.py` — nuevo: generate_weekly_report() → PDF con reportlab
+- `api/flask_app.py` — ampliado: 9 endpoints PRO, _require_pro(), checkout soporte pro, webhook tier-aware
+
+Estado tests: **48/48 passing**
+
 ## Pendiente / Próximos pasos
 
 - **Dashboard:** probar `frontend/dashboard.html` en el navegador con flujo completo de UI
-- **Deploy Railway:** añadir las 4 variables nuevas de Fase 2 en el panel de Railway y configurar webhook real de Stripe apuntando al dominio de producción
+- **Deploy Railway:** añadir variables nuevas de Fase 3 (`STRIPE_PRO_PRICE_ID`) en Railway
 - **Motor de alertas:** añadir como worker en Railway (`python services/alerts_engine.py`)
-- **Fase 3:** backtester, fundamental_analyzer, portfolio_tracker, tier PRO
+- **Fase 4:** automatización del reporte semanal, monitoring, deploy productivo
 
 ## Limitaciones conocidas (Fase 2)
 

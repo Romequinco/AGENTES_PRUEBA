@@ -46,6 +46,26 @@ La capa de newsletter se ejecuta **después** del pipeline principal y nunca lo 
 
 **Regla crítica:** `DATABASE_URL` debe apuntar a PostgreSQL (no SQLite). Railway tiene filesystem efímero.
 
+## Tier PRO (Fase 3 — operativa)
+
+Funcionalidades exclusivas para usuarios con `tier = 'pro'`. No afectan al pipeline principal.
+
+| Módulo | Rol |
+|---|---|
+| `services/backtester.py` | `backtest(symbol, strategy_dict, days)` — determinista, estrategias JSON |
+| `services/fundamental_analyzer.py` | `fundamental_data(symbol)` + `data_quality_score()` |
+| `services/portfolio_tracker.py` | `add_position`, `close_position`, `portfolio_summary` con benchmark IBEX |
+| `services/reporter.py` | `generate_weekly_report(user_id)` → PDF bajo demanda |
+
+**Formato de estrategia (JSON, no lambdas):**
+```json
+{"buy": {"indicator": "rsi", "operator": "below", "value": 30},
+ "sell": {"indicator": "rsi", "operator": "above", "value": 70}}
+```
+Indicadores: `rsi`, `sma20`, `sma50`, `macd_histogram`, `price`. Operadores: `above`, `below`, `crosses_above`, `crosses_below`.
+
+**Límite:** 3 backtests/mes por usuario PRO. Verificado en DB antes de ejecutar.
+
 ## Estructura de directorios
 
 ```
@@ -60,10 +80,11 @@ La capa de newsletter se ejecuta **después** del pipeline principal y nunca lo 
   best_practices.md  # Referencia multi-agente
 agents/              # Módulos Python de cada agente
 db/                  # Modelos SQLAlchemy (PostgreSQL)
-services/            # Formateador HTML y sender de email
-api/                 # API Flask
+services/            # Email, análisis técnico, alertas, backtester, fundamentales, portfolio, reporter
+api/                 # API Flask (Fases 1-3)
+tests/               # pytest — 48 tests (smoke + fase 3)
 data/                # Datos de mercado cacheados (raw/ y analysis/)
-output/              # Informes generados (PDF/HTML)
+output/              # Informes PDF diarios + reportes semanales PRO
 logs/                # Logs de cada ejecución diaria
 ```
 
@@ -74,3 +95,4 @@ logs/                # Logs de cada ejecución diaria
 - Mantener este CLAUDE.md bajo 200 líneas; mover reglas específicas a `.claude/rules/` si crecen
 - `check_market_hours()` en `main.py` controla si se ejecuta; usar `FORCE_RUN=true` para pruebas fuera de horario
 - `_run_newsletter()` en `main.py` falla silenciosamente — ver logs `[NEWSLETTER]` para diagnóstico
+- Las estrategias de backtesting se guardan como JSON en DB — nunca usar lambdas Python (no serializables)

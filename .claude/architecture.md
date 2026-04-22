@@ -69,12 +69,16 @@ newsletter_YYYY-MM-DD.json            │
 | `agents/writer.py` | Redactor | Genera el informe PDF/HTML con gráficos; también expone `generate_newsletter_data()` |
 | `agents/ibex_data.py` | Utilidad | Helpers para obtener datos del IBEX 35 y sus componentes |
 | `agents/utils.py` | Utilidad | Funciones compartidas (logging, formato, limpieza de runs previos) |
-| `db/models.py` | Base de datos | Modelos SQLAlchemy: `User`, `NewsletterSubscriber`, `Subscription`, `Alert`. Requiere `DATABASE_URL` (PostgreSQL) |
+| `db/models.py` | Base de datos | Modelos SQLAlchemy: `User`, `NewsletterSubscriber`, `Subscription`, `Alert`, `Strategy`, `BacktestResult`, `Portfolio`, `PortfolioPosition`. Requiere `DATABASE_URL` (PostgreSQL) |
 | `services/email_formatter.py` | Formateador | `format_newsletter_html()` → HTML mobile-friendly para el newsletter |
 | `services/email_sender.py` | Envío email | `send_bulk_newsletter()` via SendGrid Personalizations API (batch, no loop) |
 | `services/technical_analyzer.py` | Análisis técnico | `analyze(symbol)` → SMA20, SMA50, RSI14, MACD, soporte y resistencia via yfinance |
 | `services/alerts_engine.py` | Motor de alertas | Worker APScheduler; evalúa alertas activas a las 17:35 Madrid y notifica por email |
-| `api/flask_app.py` | API REST | Fase 1: `/register`, `/api/v1/newsletter/latest`, `/health`. Fase 2: auth JWT, alertas, análisis técnico, webhooks Stripe |
+| `services/backtester.py` | Backtester PRO | `backtest(symbol, strategy_dict, days)` — determinista, estrategias JSON, límite 3/mes |
+| `services/fundamental_analyzer.py` | Fundamentales PRO | `fundamental_data(symbol)` + `data_quality_score()` via yfinance — nulls en campos ausentes |
+| `services/portfolio_tracker.py` | Portfolio PRO | `add_position`, `close_position`, `portfolio_summary` con P&L y benchmark `^IBEX` |
+| `services/reporter.py` | Reporte semanal PRO | `generate_weekly_report(user_id)` → PDF en `output/weekly_{user_id}_{fecha}.pdf` |
+| `api/flask_app.py` | API REST | Fase 1: newsletter. Fase 2: auth JWT, alertas, Stripe. Fase 3: 9 endpoints PRO |
 | `frontend/dashboard.html` | Dashboard web | SPA vanilla HTML/CSS/JS — auth, indicadores técnicos, gestión de alertas, upgrade a Premium |
 
 ## Datos y outputs
@@ -104,6 +108,7 @@ api/            ← API Flask
 | `STRIPE_SECRET_KEY` | Sí (pagos) | Clave secreta de Stripe (`sk_test_...` o `sk_live_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Sí (pagos) | Signing secret del webhook de Stripe (`whsec_...`) |
 | `STRIPE_PREMIUM_PRICE_ID` | Sí (pagos) | Price ID del plan Premium en Stripe (`price_...`) |
+| `STRIPE_PRO_PRICE_ID` | Sí (tier pro) | Price ID del plan PRO en Stripe (`price_...`) |
 | `STRIPE_SUCCESS_URL` | Opcional | URL de redirección tras pago exitoso (default: `/dashboard.html`) |
 | `STRIPE_CANCEL_URL` | Opcional | URL de redirección si se cancela el pago (default: `/dashboard.html`) |
 | `ALERTS_TIMEZONE` | Opcional | Timezone del motor de alertas (default: `Europe/Madrid`) |
@@ -112,28 +117,32 @@ api/            ← API Flask
 | `FINNHUB_API_KEY` | Opcional | Para noticias adicionales |
 | `FORCE_RUN` | Opcional | `true` para ignorar horario de mercado |
 
-## Arquitectura de servicios (Fase 2)
+## Arquitectura de servicios (Fases 2 y 3)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        API Flask                            │
-│  /auth/register   /auth/login                               │
-│  /api/v1/alerts   /api/v1/technical/<symbol>                │
-│  /stripe/create-checkout   /stripe/webhook                  │
-│  /api/v1/newsletter/latest   /health   /dashboard.html      │
-└──────────────┬──────────────────────────┬───────────────────┘
-               │                          │
-               ▼                          ▼
-        PostgreSQL DB              Stripe API
-        (users, alerts,            (checkout sessions,
-        subscriptions,             webhooks → tier premium)
-        newsletter_subscribers)
-               │
-               ▼
-     alerts_engine.py (worker)
-     APScheduler 17:35 Madrid
-     → technical_analyzer.py
-     → email_sender.py (alertas)
+┌──────────────────────────────────────────────────────────────────────┐
+│                          API Flask                                   │
+│  /auth/register   /auth/login                                        │
+│  /api/v1/alerts   /api/v1/technical/<symbol>          (PREMIUM)      │
+│  /stripe/create-checkout   /stripe/webhook                           │
+│  /api/v1/newsletter/latest   /health   /dashboard.html               │
+│  /api/v1/strategies   /api/v1/backtest                (PRO)          │
+│  /api/v1/portfolios   /api/v1/reports/weekly          (PRO)          │
+└──────────┬──────────────────────────────────┬────────────────────────┘
+           │                                  │
+           ▼                                  ▼
+    PostgreSQL DB                       Stripe API
+    (users, alerts,                     (checkout sessions,
+    subscriptions,                      webhooks → tier premium/pro)
+    newsletter_subscribers,
+    strategies, backtest_results,
+    portfolios, portfolio_positions)
+           │
+           ▼
+ alerts_engine.py (worker)
+ APScheduler 17:35 Madrid
+ → technical_analyzer.py
+ → email_sender.py (alertas)
 ```
 
 **Workers independientes:**

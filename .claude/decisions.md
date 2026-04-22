@@ -134,6 +134,28 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 015 — Estrategias de backtesting como JSON (no lambdas Python)
+
+**Decisión:** Las condiciones de compra/venta se definen como JSON (`{"indicator": "rsi", "operator": "below", "value": 30}`) y se guardan tal cual en la columna `JSON` de PostgreSQL. No se usan lambdas ni funciones Python serializadas.
+
+**Por qué:** Las lambdas Python no son serializables (no se pueden guardar en DB ni reconstruir después). Una estrategia guardada como JSON puede ser recuperada, mostrada al usuario, versionada y reproducida de forma idéntica en cualquier momento. Es el requisito de determinismo: misma estrategia + mismos datos = mismo resultado siempre.
+
+**Indicadores soportados:** `rsi`, `sma20`, `sma50`, `macd_histogram`, `price`. Si el usuario pasa uno no soportado, `validate_strategy()` lanza `ValueError` con mensaje que lista los válidos — la API devuelve 400.
+
+**Cómo aplicar:** Toda la lógica de evaluación vive en `services/backtester.py`. Si se añade un indicador nuevo, hay que actualizar `VALID_INDICATORS` y `_indicator_series()` — en ningún otro sitio.
+
+---
+
+## 016 — Límite de backtests por mes contado en DB (no en memoria)
+
+**Decisión:** El límite de 3 backtests/mes para usuarios PRO se verifica consultando `backtest_results` en PostgreSQL (filtrando por `user_id` y `ran_at >= inicio_del_mes`), no con un contador en memoria o caché.
+
+**Por qué:** La API corre como proceso stateless — no hay memoria compartida entre requests. Un contador en memoria se resetea con cada deploy o restart. La DB es la única fuente de verdad persistente.
+
+**Cómo aplicar:** El endpoint `POST /api/v1/backtest` hace el `COUNT` antes de ejecutar. Si el count >= 3, devuelve 429. El registro se inserta en `backtest_results` solo si el backtest termina con éxito.
+
+---
+
 ## 009 — SendGrid Personalizations API (batch, no loop)
 
 **Decisión:** `send_bulk_newsletter()` construye un único payload con todas las `personalizations` y hace un solo request HTTP, no un loop de `send_per_user`.

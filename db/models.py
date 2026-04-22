@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean,
-    DateTime, Float, ForeignKey, Enum as SAEnum,
+    DateTime, Float, ForeignKey, Enum as SAEnum, JSON, Date,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
@@ -38,6 +38,9 @@ class User(Base):
     subscription = relationship("NewsletterSubscriber", back_populates="user", uselist=False)
     stripe_subscription = relationship("Subscription", back_populates="user", uselist=False)
     alerts = relationship("Alert", back_populates="user")
+    strategies = relationship("Strategy", back_populates="user")
+    backtest_results = relationship("BacktestResult", back_populates="user")
+    portfolios = relationship("Portfolio", back_populates="user")
 
 
 class NewsletterSubscriber(Base):
@@ -81,6 +84,65 @@ class Alert(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="alerts")
+
+
+class Strategy(Base):
+    __tablename__ = "strategies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    buy_condition = Column(JSON, nullable=False)
+    sell_condition = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="strategies")
+    backtest_results = relationship("BacktestResult", back_populates="strategy")
+
+
+class BacktestResult(Base):
+    __tablename__ = "backtest_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id", ondelete="SET NULL"), nullable=True, index=True)
+    symbol = Column(String(20), nullable=False)
+    days_tested = Column(Integer, nullable=False)
+    total_trades = Column(Integer, nullable=False)
+    win_rate = Column(Float, nullable=True)
+    total_return_pct = Column(Float, nullable=True)
+    max_drawdown_pct = Column(Float, nullable=True)
+    ran_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="backtest_results")
+    strategy = relationship("Strategy", back_populates="backtest_results")
+
+
+class Portfolio(Base):
+    __tablename__ = "portfolios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="portfolios")
+    positions = relationship("PortfolioPosition", back_populates="portfolio")
+
+
+class PortfolioPosition(Base):
+    __tablename__ = "portfolio_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True)
+    symbol = Column(String(20), nullable=False)
+    quantity = Column(Float, nullable=False)
+    entry_price = Column(Float, nullable=False)
+    entry_date = Column(Date, nullable=False)
+    exit_price = Column(Float, nullable=True)
+    exit_date = Column(Date, nullable=True)
+
+    portfolio = relationship("Portfolio", back_populates="positions")
 
 
 def create_tables():
