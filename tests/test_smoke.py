@@ -171,7 +171,7 @@ def test_analyst_build_prompt():
     agent.retry_delay = 0
     agent.madrid = pytz.timezone("Europe/Madrid")
 
-    skills_dir = os.path.join(PROJECT_ROOT, "skills")
+    skills_dir = os.path.join(PROJECT_ROOT, ".claude", "skills")
     with open(os.path.join(skills_dir, "analyst_instructions.md"), encoding="utf-8") as f:
         agent.system_prompt = f.read()
 
@@ -210,7 +210,7 @@ def test_analyst_build_prompt():
     "leader_instructions.md",
 ])
 def test_skill_file_exists(skill):
-    path = os.path.join(PROJECT_ROOT, "skills", skill)
+    path = os.path.join(PROJECT_ROOT, ".claude", "skills", skill)
     assert os.path.exists(path), f"No existe: {path}"
     with open(path, encoding="utf-8") as f:
         content = f.read()
@@ -220,7 +220,7 @@ def test_skill_file_exists(skill):
 # ── 6. Estructura de directorios ─────────────────────────────────────────────
 
 @pytest.mark.parametrize("d", [
-    "data/raw", "data/analysis", "output", "logs", "agents", "skills"
+    "data/raw", "data/analysis", "output", "logs", "agents", ".claude/skills"
 ])
 def test_directory_exists(d):
     path = os.path.join(PROJECT_ROOT, d)

@@ -87,7 +87,13 @@ Funcionalidades exclusivas para `tier = 'pro'`. No afectan al pipeline principal
 ## Estructura de directorios
 
 ```
-.claude/              # Guías, decisiones, estado del sistema
+.claude/
+  skills/             # Instrucciones de cada agente (*_instructions.md)
+  CLAUDE.md           # Este archivo
+  architecture.md     # Diagrama del pipeline y módulos
+  decisions.md        # Log de decisiones de diseño
+  estado_actual.md    # Estado operativo actual
+  best_practices.md   # Referencia multi-agente
 agents/               # Módulos Python de cada agente (Recopilador, Analista, Redactor, Orquestador)
 db/                   # Modelos SQLAlchemy (PostgreSQL)
 services/             # email_formatter, email_sender, technical_analyzer, alerts_engine,

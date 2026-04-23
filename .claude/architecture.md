@@ -79,6 +79,7 @@ newsletter_YYYY-MM-DD.json    (SendGrid Personalizations)
 | `api/helpers.py` | Helpers | `get_db()`, `require_premium()`, `require_pro()` |
 | `frontend/dashboard.html` | Dashboard | SPA vanilla: auth, indicadores técnicos, alertas, upgrade |
 | `frontend/admin_dashboard.html` | Admin | KPIs en tiempo real — actualización cada 5 min |
+| `.claude/skills/*_instructions.md` | Prompts | System prompts de cada agente del pipeline |
 
 ## Sistema completo en Railway
 
