@@ -8,7 +8,8 @@
       "Bash(python -c ':*)",
       "Bash(python -c \"import squarify; print\\('squarify OK'\\)\")",
       "Bash(.venv/Scripts/pip install:*)",
-      "Bash(.venv/Scripts/python -c \"import squarify; import agents.writer; print\\('OK'\\)\")"
+      "Bash(.venv/Scripts/python -c \"import squarify; import agents.writer; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/ -v)"
     ]
   }
 }

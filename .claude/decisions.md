@@ -168,6 +168,56 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 018 — Rate limiting del monitoring en memoria (no en DB)
+
+**Decisión:** `services/monitoring.py` guarda los timestamps de los últimos emails de error en un dict Python en memoria (`_last_sent`). No usa Redis, no usa la DB.
+
+**Por qué:** El objetivo es evitar que un error en bucle mande cientos de emails al administrador. Para eso, un dict en memoria es suficiente y tiene coste cero. La DB añadiría latencia y dependencia circular (si la DB falla, el monitoring que informa del fallo también fallaría). La pérdida del rate limit al reiniciar el proceso es aceptable — en el peor caso llega un email extra tras un restart.
+
+**Cómo aplicar:** `_RATE_LIMIT_SECONDS = 3600` (1 hora). La clave es `f"{error_message[:120]}:{context[:60]}"`. Cambiar si hace falta granularidad por tipo de error o por usuario.
+
+---
+
+## 019 — ADMIN_API_KEY como auth del panel de admin (no JWT)
+
+**Decisión:** `/admin/metrics` se protege con un header `X-Admin-Key` que debe coincidir con la variable de entorno `ADMIN_API_KEY`. No usa JWT ni sesiones.
+
+**Por qué:** El panel de admin es un endpoint de uso interno, no de usuarios. JWT requiere un flujo de login previo y tiene sentido para usuarios con identidades distintas. Una API key de admin es más simple, auditable y suficiente para el caso de uso: una sola persona con acceso total. Si la key no está configurada, el endpoint devuelve 503 (no 401) para distinguir "mal configurado" de "key incorrecta".
+
+**Cómo aplicar:** Nunca exponer `ADMIN_API_KEY` en el frontend público. El `admin_dashboard.html` guarda la key en memoria de sesión JS (no en `localStorage`) para que se borre al cerrar la pestaña.
+
+---
+
+## 020 — gunicorn como servidor WSGI en producción (no Flask dev server)
+
+**Decisión:** En Railway, la API arranca con `gunicorn api.flask_app:app --workers 2 --bind 0.0.0.0:$PORT`. El servidor de desarrollo de Flask (`app.run()`) no se usa en producción.
+
+**Por qué:** El servidor de Flask es single-threaded y no está diseñado para carga real. gunicorn gestiona múltiples workers, maneja señales de OS correctamente, tiene mejor gestión de timeouts y es el estándar para Flask/WSGI en producción. Railway asigna `$PORT` automáticamente — gunicorn debe leer esa variable, nunca hardcodear el puerto.
+
+**Cómo aplicar:** `--workers 2` es conservador para el plan básico de Railway. Con más RAM disponible, aumentar a `2 * CPU + 1`. El `--timeout 120` previene que requests que llaman a yfinance (lento) maten al worker.
+
+---
+
+## 021 — Reportes semanales PRO en el mismo worker de alertas (no proceso separado)
+
+**Decisión:** El job de generación de reportes semanales PRO (`_generate_weekly_reports`) se añade al mismo APScheduler de `alerts_engine.py`, no como un cron de GitHub Actions ni como un proceso separado.
+
+**Por qué:** Ya existe un worker de APScheduler corriendo en Railway. Añadir un job al scheduler existente es gratis en términos de infraestructura. Un cron de GitHub Actions requeriría un `DATABASE_URL` y acceso a yfinance desde el runner de CI, mezclaría responsabilidades (CI es para el pipeline de informe, no para tareas de usuarios) y añadiría latencia impredecible. Un proceso separado duplicaría la complejidad de Railway sin beneficio.
+
+**Cómo aplicar:** Si un reporte individual falla, se loguea el error y se continúa con el siguiente usuario — el job nunca aborta por un fallo parcial. El scheduler tiene `@monitor_errors` para avisar si el job completo falla al arrancar.
+
+---
+
+## 022 — /health como contrato de Railway (nunca lanza excepción)
+
+**Decisión:** El endpoint `/health` captura cualquier excepción interna y devuelve `{"status": "degraded"}` en lugar de propagar el error. Nunca devuelve 5xx.
+
+**Por qué:** Railway usa `/health` (configurado en `railway.toml`) para decidir si el servicio está sano y si debe reiniciarlo. Si `/health` devuelve 500, Railway entra en bucle de reinicios aunque el resto de la app funcione correctamente. Un 200 con `status: degraded` informa al administrador del problema sin causar reinicios innecesarios.
+
+**Cómo aplicar:** Si se añaden nuevas dependencias al sistema (Redis, un servicio externo), añadir su check al `/health`. El campo `db` comprueba la conexión con un `SELECT 1`. Los campos `sendgrid` y `stripe` solo comprueban que las keys estén configuradas, no hacen requests reales (evita latencia y throttling).
+
+---
+
 ## 009 — SendGrid Personalizations API (batch, no loop)
 
 **Decisión:** `send_bulk_newsletter()` construye un único payload con todas las `personalizations` y hace un solo request HTTP, no un loop de `send_per_user`.

@@ -158,6 +158,34 @@ def _build_alert_html(alert, data: dict, subject: str) -> str:
 </html>"""
 
 
+def _generate_weekly_reports() -> None:
+    """Genera el reporte semanal PDF para todos los usuarios PRO activos.
+
+    Ejecutado cada lunes a las 08:00 Madrid. Si un reporte individual falla,
+    se loguea y se continúa con el siguiente usuario.
+    """
+    from db.models import SessionLocal, User
+    from services.reporter import generate_weekly_report
+    from services.monitoring import monitor_errors
+
+    logger.info("[WEEKLY] Iniciando generación de reportes semanales PRO...")
+    db = SessionLocal()
+    try:
+        pro_users = db.query(User).filter(User.tier == "pro").all()
+        logger.info(f"[WEEKLY] {len(pro_users)} usuario(s) PRO encontrado(s).")
+        for user in pro_users:
+            try:
+                path = generate_weekly_report(user.id)
+                logger.info(f"[WEEKLY] Reporte generado para user {user.id}: {path}")
+            except Exception as e:
+                logger.error(f"[WEEKLY] Error generando reporte para user {user.id}: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"[WEEKLY] Error consultando usuarios PRO: {e}", exc_info=True)
+    finally:
+        db.close()
+    logger.info("[WEEKLY] Generación de reportes semanales completada.")
+
+
 def create_scheduler():
     """Crea y configura el APScheduler. No lo inicia (para testing)."""
     from apscheduler.schedulers.blocking import BlockingScheduler
@@ -181,15 +209,27 @@ def create_scheduler():
     import pytz
     tz = pytz.timezone(tz_name)
 
+    from services.monitoring import monitor_errors
+
     scheduler = BlockingScheduler(jobstores=jobstores if jobstores else None, timezone=tz)
     scheduler.add_job(
-        _evaluate_alerts,
+        monitor_errors(_evaluate_alerts),
         trigger="cron",
         hour=hour,
         minute=minute,
         id="evaluate_alerts",
         replace_existing=True,
         name=f"Evaluar alertas a las {hour:02d}:{minute:02d} {tz_name}",
+    )
+    scheduler.add_job(
+        monitor_errors(_generate_weekly_reports),
+        trigger="cron",
+        day_of_week="mon",
+        hour=8,
+        minute=0,
+        id="weekly_pro_reports",
+        replace_existing=True,
+        name="Generar reportes semanales PRO (lunes 08:00 Madrid)",
     )
     return scheduler
 

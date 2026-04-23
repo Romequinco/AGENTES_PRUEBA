@@ -25,3 +25,6 @@ flask-jwt-extended>=4.6.0
 bcrypt>=4.1.0
 stripe>=9.0.0
 apscheduler>=3.10.0
+
+# Producción — Railway proporciona SSL/HTTPS automáticamente en dominios .railway.app
+gunicorn>=22.0.0

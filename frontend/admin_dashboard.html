@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IBEX 35 — Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+    header {
+      background: #1e3a5f;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 600; }
+    #status-bar {
+      font-size: 0.75rem;
+      color: #a0c4e8;
+    }
+    main {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    #auth-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      margin-top: 80px;
+    }
+    #auth-screen h2 { font-size: 1.1rem; color: #1e3a5f; }
+    #auth-screen input {
+      padding: 10px 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      width: 280px;
+    }
+    #auth-screen button {
+      padding: 10px 28px;
+      background: #1e3a5f;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #auth-screen button:hover { background: #2a5080; }
+    #error-msg { color: #c0392b; font-size: 0.85rem; }
+    #dashboard { display: none; }
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #5a6a7a;
+      margin: 28px 0 12px;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px 18px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+    .card .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #7a8a9a;
+      margin-bottom: 6px;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1e3a5f;
+      line-height: 1;
+    }
+    .card .value.accent { color: #2980b9; }
+    .card .value.green  { color: #27ae60; }
+    .card .value.orange { color: #e67e22; }
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 0.75rem;
+      color: #9aa;
+    }
+    #loading { text-align: center; color: #666; padding: 40px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>IBEX 35 — Panel de Administración</h1>
+  <span id="status-bar">–</span>
+</header>
+
+<main>
+  <!-- Pantalla de autenticación -->
+  <div id="auth-screen">
+    <h2>Introduce la clave de administrador</h2>
+    <input type="password" id="admin-key-input" placeholder="ADMIN_API_KEY" autocomplete="off">
+    <button onclick="authenticate()">Acceder</button>
+    <span id="error-msg"></span>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+    <div id="loading">Cargando métricas...</div>
+
+    <div id="metrics-content" style="display:none">
+      <p class="section-title">Usuarios</p>
+      <div class="cards">
+        <div class="card"><div class="label">Total</div><div class="value" id="m-users-total">–</div></div>
+        <div class="card"><div class="label">Free</div><div class="value" id="m-users-free">–</div></div>
+        <div class="card"><div class="label">Premium</div><div class="value accent" id="m-users-premium">–</div></div>
+        <div class="card"><div class="label">PRO</div><div class="value green" id="m-users-pro">–</div></div>
+      </div>
+
+      <p class="section-title">Newsletter</p>
+      <div class="cards">
+        <div class="card"><div class="label">Suscriptores activos</div><div class="value accent" id="m-nl-subs">–</div></div>
+      </div>
+
+      <p class="section-title">Alertas técnicas</p>
+      <div class="cards">
+        <div class="card"><div class="label">Activas ahora</div><div class="value" id="m-alerts-active">–</div></div>
+        <div class="card"><div class="label">Disparadas (7d)</div><div class="value orange" id="m-alerts-7d">–</div></div>
+      </div>
+
+      <p class="section-title">Backtests y Portfolios</p>
+      <div class="cards">
+        <div class="card"><div class="label">Backtests (30d)</div><div class="value accent" id="m-bt-30d">–</div></div>
+        <div class="card"><div class="label">Portfolios total</div><div class="value" id="m-portfolios">–</div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>Actualización automática cada 5 minutos &middot; Datos en tiempo real de la base de datos</footer>
+
+<script>
+  // La admin key se guarda solo en memoria de sesión (variable JS), no en localStorage
+  let _adminKey = null;
+  let _refreshTimer = null;
+
+  function authenticate() {
+    const key = document.getElementById("admin-key-input").value.trim();
+    if (!key) return;
+    _adminKey = key;
+    document.getElementById("auth-screen").style.display = "none";
+    document.getElementById("dashboard").style.display = "block";
+    loadMetrics();
+  }
+
+  document.getElementById("admin-key-input").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") authenticate();
+  });
+
+  async function loadMetrics() {
+    document.getElementById("loading").style.display = "block";
+    document.getElementById("metrics-content").style.display = "none";
+
+    try {
+      const res = await fetch("/admin/metrics", {
+        headers: { "X-Admin-Key": _adminKey }
+      });
+
+      if (res.status === 401) {
+        _adminKey = null;
+        document.getElementById("dashboard").style.display = "none";
+        document.getElementById("auth-screen").style.display = "flex";
+        document.getElementById("error-msg").textContent = "Clave incorrecta.";
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      renderMetrics(data);
+      scheduleRefresh();
+    } catch (err) {
+      document.getElementById("loading").textContent = "Error cargando métricas: " + err.message;
+    }
+  }
+
+  function renderMetrics(d) {
+    document.getElementById("m-users-total").textContent    = d.users.total;
+    document.getElementById("m-users-free").textContent     = d.users.free;
+    document.getElementById("m-users-premium").textContent  = d.users.premium;
+    document.getElementById("m-users-pro").textContent      = d.users.pro;
+    document.getElementById("m-nl-subs").textContent        = d.newsletter.active_subscribers;
+    document.getElementById("m-alerts-active").textContent  = d.alerts.total_active;
+    document.getElementById("m-alerts-7d").textContent      = d.alerts.triggered_last_7d;
+    document.getElementById("m-bt-30d").textContent         = d.backtests.total_last_30d;
+    document.getElementById("m-portfolios").textContent     = d.portfolios.total;
+
+    const now = new Date().toLocaleTimeString("es-ES");
+    document.getElementById("status-bar").textContent = "Última actualización: " + now;
+
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("metrics-content").style.display = "block";
+  }
+
+  function scheduleRefresh() {
+    if (_refreshTimer) clearTimeout(_refreshTimer);
+    _refreshTimer = setTimeout(loadMetrics, 5 * 60 * 1000); // 5 minutos
+  }
+</script>
+</body>
+</html>

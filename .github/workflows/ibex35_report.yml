@@ -36,6 +36,9 @@ jobs:
       - name: Generar informe IBEX 35
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
           FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
         run: python main.py
 

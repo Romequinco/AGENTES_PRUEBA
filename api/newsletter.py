@@ -10,6 +10,7 @@ Endpoints (sin prefijo):
 import glob
 import json
 import os
+from datetime import datetime, timezone
 
 import bcrypt
 from flask import Blueprint, request, jsonify, send_from_directory, current_app
@@ -84,7 +85,23 @@ def newsletter_latest():
 
 @newsletter_bp.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"}), 200
+    result = {
+        "status": "ok",
+        "db": "connected",
+        "sendgrid": "configured" if os.environ.get("SENDGRID_API_KEY") else "missing_key",
+        "stripe": "configured" if os.environ.get("STRIPE_SECRET_KEY") else "missing_key",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        from api.helpers import get_db
+        db = get_db()
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db.close()
+    except Exception as e:
+        current_app.logger.warning(f"/health db check failed: {e}")
+        result["db"] = "error"
+        result["status"] = "degraded"
+    return jsonify(result), 200
 
 
 @newsletter_bp.route("/dashboard.html", methods=["GET"])

@@ -30,6 +30,7 @@ from api.newsletter import newsletter_bp
 from api.premium import premium_bp
 from api.pro import pro_bp
 from api.stripe import stripe_bp
+from api.admin import admin_bp
 
 
 def create_app() -> Flask:
@@ -46,6 +47,7 @@ def create_app() -> Flask:
     app.register_blueprint(premium_bp)
     app.register_blueprint(pro_bp)
     app.register_blueprint(stripe_bp)
+    app.register_blueprint(admin_bp)
 
     return app
 

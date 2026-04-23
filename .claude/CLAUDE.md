@@ -13,8 +13,6 @@ Pipeline: **Recopilador → Analista → Redactor → Validación por el Orquest
 
 ## Arquitectura de agentes
 
-Definidos en `.claude/agents/` (frontmatter con modelo y herramientas). Los módulos Python equivalentes están en `agents/`.
-
 | Agente | Módulo Python | Modelo | Herramientas |
 |---|---|---|---|
 | Recopilador | `agents/researcher.py` | Sonnet | Read, Bash, WebFetch |
@@ -29,7 +27,6 @@ El orquestador lanza Recopilador y Analista **en paralelo**, luego Redactor en s
 - El orquestador nunca escribe datos directamente; delega toda escritura al Redactor
 - Los subagentes de análisis son read-only: si intentan modificar archivos, es un error de diseño
 - Los subagentes **no heredan** el historial del padre — cada prompt debe incluir el contexto necesario
-- Cada invocación debe incluir criterios de éxito explícitos y formato de salida esperado
 - Usar `isolation: worktree` solo si dos agentes deben editar archivos distintos en paralelo
 
 ## Capa de newsletter (Fase 1 — operativa)
@@ -39,67 +36,87 @@ La capa de newsletter se ejecuta **después** del pipeline principal y nunca lo 
 | Módulo | Rol |
 |---|---|
 | `agents/writer.py::generate_newsletter_data()` | Extrae campos clave del JSON del Analista |
-| `services/email_formatter.py` | Genera HTML mobile-friendly |
+| `services/email_formatter.py` | HTML mobile-friendly |
 | `services/email_sender.py` | Envío batch via SendGrid Personalizations API |
-| `db/models.py` | Modelos SQLAlchemy: `User`, `NewsletterSubscriber` |
-| `api/flask_app.py` | API REST: registro de usuarios y consulta del último newsletter |
+| `db/models.py` | SQLAlchemy: `User`, `NewsletterSubscriber` |
 
 **Regla crítica:** `DATABASE_URL` debe apuntar a PostgreSQL (no SQLite). Railway tiene filesystem efímero.
 
-## Tier PRO (Fase 3 — operativa)
-
-Funcionalidades exclusivas para usuarios con `tier = 'pro'`. No afectan al pipeline principal.
+## Auth + Premium (Fase 2 — operativa)
 
 | Módulo | Rol |
 |---|---|
-| `services/backtester.py` | `backtest(symbol, strategy_dict, days)` — determinista, estrategias JSON |
+| `api/auth.py` | JWT: `/auth/register`, `/auth/login` |
+| `api/premium.py` | Alertas técnicas + análisis (tier premium/pro) |
+| `api/stripe.py` | Checkout, webhooks — tier actualizado solo por webhook |
+| `services/alerts_engine.py` | Worker APScheduler: evalúa alertas 17:35 Madrid |
+| `services/technical_analyzer.py` | SMA20, SMA50, RSI14, MACD via yfinance |
+| `frontend/dashboard.html` | SPA vanilla: auth, indicadores, alertas, upgrade |
+
+## Tier PRO (Fase 3 — operativa)
+
+Funcionalidades exclusivas para `tier = 'pro'`. No afectan al pipeline principal.
+
+| Módulo | Rol |
+|---|---|
+| `services/backtester.py` | `backtest(symbol, strategy_dict, days)` — determinista, JSON |
 | `services/fundamental_analyzer.py` | `fundamental_data(symbol)` + `data_quality_score()` |
-| `services/portfolio_tracker.py` | `add_position`, `close_position`, `portfolio_summary` con benchmark IBEX |
-| `services/reporter.py` | `generate_weekly_report(user_id)` → PDF bajo demanda |
+| `services/portfolio_tracker.py` | `add_position`, `close_position`, `portfolio_summary` |
+| `services/reporter.py` | `generate_weekly_report(user_id)` → PDF |
 
 **Formato de estrategia (JSON, no lambdas):**
 ```json
 {"buy": {"indicator": "rsi", "operator": "below", "value": 30},
  "sell": {"indicator": "rsi", "operator": "above", "value": 70}}
 ```
-Indicadores: `rsi`, `sma20`, `sma50`, `macd_histogram`, `price`. Operadores: `above`, `below`, `crosses_above`, `crosses_below`.
-
 **Límite:** 3 backtests/mes por usuario PRO. Verificado en DB antes de ejecutar.
+
+## Producción en Railway (Fase 4 — operativa)
+
+| Módulo/Archivo | Rol |
+|---|---|
+| `railway.toml` + `Procfile` | 2 servicios: `web` (gunicorn) + `worker` (alerts_engine) |
+| `services/monitoring.py` | `send_error_alert()` + `@monitor_errors` — rate limit 1h en memoria |
+| `api/admin.py` | `GET /admin/metrics` — protegido por header `X-Admin-Key` |
+| `frontend/admin_dashboard.html` | KPIs en tiempo real, actualización cada 5 min |
+| `DEPLOY.md` | Guía de primer deploy en Railway (7 pasos) |
+
+**Job semanal:** `alerts_engine.py` genera reportes PRO cada lunes 08:00 Madrid. Fallo individual no aborta el batch.
+**`/health`** devuelve `{status, db, sendgrid, stripe, timestamp}` — nunca lanza excepción.
 
 ## Estructura de directorios
 
 ```
-.claude/
-  agents/            # Definiciones de subagentes Claude (.md con frontmatter)
-  skills/            # Slash commands del proyecto (/skill-name)
-  hooks/             # Scripts ejecutados en eventos del ciclo de vida
-  CLAUDE.md          # Este archivo
-  architecture.md    # Diagrama del pipeline y módulos
-  decisions.md       # Log de decisiones de diseño
-  estado_actual.md   # Estado operativo actual del sistema
-  best_practices.md  # Referencia multi-agente
-agents/              # Módulos Python de cada agente
-db/                  # Modelos SQLAlchemy (PostgreSQL)
-services/            # Email, análisis técnico, alertas, backtester, fundamentales, portfolio, reporter
+.claude/              # Guías, decisiones, estado del sistema
+agents/               # Módulos Python de cada agente (Recopilador, Analista, Redactor, Orquestador)
+db/                   # Modelos SQLAlchemy (PostgreSQL)
+services/             # email_formatter, email_sender, technical_analyzer, alerts_engine,
+                      # monitoring, backtester, fundamental_analyzer, portfolio_tracker, reporter
 api/
-  flask_app.py       # App factory — solo registra blueprints, punto de entrada
-  helpers.py         # get_db(), require_premium(), require_pro() — compartidos
-  auth.py            # Blueprint /auth/*
-  newsletter.py      # Blueprint newsletter y endpoints públicos
-  premium.py         # Blueprint tier premium/pro
-  pro.py             # Blueprint tier pro exclusivo
-  stripe.py          # Blueprint /stripe/*
-tests/               # pytest — 48 tests (smoke + fase 3)
-data/                # Datos de mercado cacheados (raw/ y analysis/)
-output/              # Informes PDF diarios + reportes semanales PRO
-logs/                # Logs de cada ejecución diaria
+  flask_app.py        # App factory — registra 6 blueprints
+  helpers.py          # get_db(), require_premium(), require_pro()
+  auth.py             # Blueprint /auth/*
+  newsletter.py       # Blueprint /register, /api/v1/newsletter/latest, /health
+  premium.py          # Blueprint alertas + análisis técnico (tier premium/pro)
+  pro.py              # Blueprint estrategias, backtests, portfolios, reporte (tier pro)
+  stripe.py           # Blueprint /stripe/*
+  admin.py            # Blueprint /admin/metrics (X-Admin-Key)
+frontend/             # dashboard.html (usuarios) + admin_dashboard.html (admin)
+tests/                # pytest — 48 tests (smoke + fase 3)
+data/                 # raw/ y analysis/ (datos cacheados + newsletter JSON)
+output/               # PDFs diarios + reportes semanales PRO
+logs/                 # run_YYYY-MM-DD.log por ejecución
+railway.toml          # Configuración Railway (2 servicios)
+Procfile              # Fallback Railway
+DEPLOY.md             # Guía de primer deploy
 ```
 
 ## Convenciones importantes
 
-- Ver `.claude/best_practices.md` para referencia completa sobre subagentes, skills y hooks
-- El sistema de memoria automática de Claude está activo; no sobreescribir con información efímera
-- Mantener este CLAUDE.md bajo 200 líneas; mover reglas específicas a `.claude/rules/` si crecen
-- `check_market_hours()` en `main.py` controla si se ejecuta; usar `FORCE_RUN=true` para pruebas fuera de horario
-- `_run_newsletter()` en `main.py` falla silenciosamente — ver logs `[NEWSLETTER]` para diagnóstico
-- Las estrategias de backtesting se guardan como JSON en DB — nunca usar lambdas Python (no serializables)
+- `check_market_hours()` en `main.py` controla si se ejecuta; `FORCE_RUN=true` para pruebas
+- `_run_newsletter()` falla silenciosamente — ver logs `[NEWSLETTER]` para diagnóstico
+- Estrategias de backtesting: siempre JSON, nunca lambdas (no serializables)
+- `@monitor_errors` de `services/monitoring.py`: usar en jobs nuevos de APScheduler — re-lanza la excepción, no la silencia
+- `ADMIN_API_KEY` controla `/admin/metrics`; si no está configurada el endpoint devuelve 503
+- Ver `DEPLOY.md` para lista completa de variables de entorno requeridas por servicio
+- Ver `.claude/best_practices.md` para referencia de subagentes, skills y hooks

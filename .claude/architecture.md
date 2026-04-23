@@ -14,7 +14,6 @@ GitHub Actions (17:35 Madrid, días laborables)
                      │
          ┌───────────▼───────────┐
          │   agents/leader.py    │  ← Orquestador (Opus)
-         │   (Orquestador)       │
          └───────┬───────────────┘
                  │
         ┌────────┴────────┐
@@ -23,23 +22,20 @@ GitHub Actions (17:35 Madrid, días laborables)
 researcher.py        analyst.py
 (Recopilador)        (Analista)
 Sonnet               Sonnet
-Read/Bash/WebFetch   Read/Bash/WebFetch
         │                 │
         └────────┬────────┘
                  │
                  ▼
            writer.py       ← Redactor (Sonnet) — único con Write
-           (Redactor)
                  │
                  ▼
         output/informe_YYYY-MM-DD.pdf
                  │
                  ▼
-         Validación final
-         por leader.py (Opus)
+         Validación final por leader.py
                  │
                  ▼
-         _run_newsletter()    ← añadido en Fase 1, no bloquea el pipeline
+         _run_newsletter()    ← no bloquea el pipeline
                  │
         ┌────────┴────────────────────┐
         │                             │
@@ -47,122 +43,98 @@ Read/Bash/WebFetch   Read/Bash/WebFetch
 generate_newsletter_data()     Carga suscriptores
 (writer.py)                    activos de PostgreSQL
         │                             │
-        ▼                             │
-data/analysis/                        │
-newsletter_YYYY-MM-DD.json            │
-                                      ▼
-                             send_bulk_newsletter()
-                             (SendGrid Personalizations)
-                                      │
-                                      ▼
-                               Email a suscriptores
+        ▼                             ▼
+data/analysis/                send_bulk_newsletter()
+newsletter_YYYY-MM-DD.json    (SendGrid Personalizations)
 ```
 
 ## Módulos Python
 
 | Archivo | Rol | Descripción |
 |---|---|---|
-| `main.py` | Entry point | Controla horario, logging, directorios, orquesta el pipeline y lanza el newsletter |
-| `agents/leader.py` | Orquestador | Coordina subagentes, valida el informe final |
-| `agents/researcher.py` | Recopilador | Descarga precios, volúmenes y noticias vía yfinance/WebFetch |
-| `agents/analyst.py` | Analista | Análisis técnico (RSI, medias, señales), macro, atribución sectorial |
-| `agents/writer.py` | Redactor | Genera el informe PDF/HTML con gráficos; también expone `generate_newsletter_data()` |
-| `agents/ibex_data.py` | Utilidad | Helpers para obtener datos del IBEX 35 y sus componentes |
-| `agents/utils.py` | Utilidad | Funciones compartidas (logging, formato, limpieza de runs previos) |
-| `db/models.py` | Base de datos | Modelos SQLAlchemy: `User`, `NewsletterSubscriber`, `Subscription`, `Alert`, `Strategy`, `BacktestResult`, `Portfolio`, `PortfolioPosition`. Requiere `DATABASE_URL` (PostgreSQL) |
-| `services/email_formatter.py` | Formateador | `format_newsletter_html()` → HTML mobile-friendly para el newsletter |
-| `services/email_sender.py` | Envío email | `send_bulk_newsletter()` via SendGrid Personalizations API (batch, no loop) |
-| `services/technical_analyzer.py` | Análisis técnico | `analyze(symbol)` → SMA20, SMA50, RSI14, MACD, soporte y resistencia via yfinance |
-| `services/alerts_engine.py` | Motor de alertas | Worker APScheduler; evalúa alertas activas a las 17:35 Madrid y notifica por email |
-| `services/backtester.py` | Backtester PRO | `backtest(symbol, strategy_dict, days)` — determinista, estrategias JSON, límite 3/mes |
-| `services/fundamental_analyzer.py` | Fundamentales PRO | `fundamental_data(symbol)` + `data_quality_score()` via yfinance — nulls en campos ausentes |
-| `services/portfolio_tracker.py` | Portfolio PRO | `add_position`, `close_position`, `portfolio_summary` con P&L y benchmark `^IBEX` |
-| `services/reporter.py` | Reporte semanal PRO | `generate_weekly_report(user_id)` → PDF en `output/weekly_{user_id}_{fecha}.pdf` |
-| `api/flask_app.py` | App factory | Crea la app Flask y registra los 5 blueprints. Punto de entrada (`python api/flask_app.py`) |
-| `api/auth.py` | Blueprint auth | `/auth/register`, `/auth/login` |
-| `api/newsletter.py` | Blueprint newsletter | `/register` (legacy), `/api/v1/newsletter/latest`, `/health`, `/dashboard.html` |
-| `api/premium.py` | Blueprint premium | `/api/v1/alerts`, `/api/v1/technical/<symbol>` — requiere tier premium/pro |
-| `api/pro.py` | Blueprint PRO | Estrategias, backtests, portfolios, reporte semanal — requiere tier pro |
-| `api/stripe.py` | Blueprint Stripe | `/stripe/create-checkout`, `/stripe/webhook` |
-| `api/helpers.py` | Helpers compartidos | `get_db()`, `require_premium()`, `require_pro()` — usados por todos los blueprints |
-| `frontend/dashboard.html` | Dashboard web | SPA vanilla HTML/CSS/JS — auth, indicadores técnicos, gestión de alertas, upgrade a Premium |
+| `main.py` | Entry point | Controla horario, logging, directorios, pipeline y newsletter |
+| `agents/leader.py` | Orquestador | Coordina subagentes, valida informe final |
+| `agents/researcher.py` | Recopilador | Precios, volúmenes y noticias vía yfinance/WebFetch |
+| `agents/analyst.py` | Analista | RSI, medias, señales, macro, atribución sectorial |
+| `agents/writer.py` | Redactor | Genera PDF/HTML con gráficos; expone `generate_newsletter_data()` |
+| `agents/ibex_data.py` | Utilidad | Helpers para datos del IBEX 35 |
+| `agents/utils.py` | Utilidad | Logging, formato, limpieza de runs previos |
+| `db/models.py` | Base de datos | SQLAlchemy: User, NewsletterSubscriber, Subscription, Alert, Strategy, BacktestResult, Portfolio, PortfolioPosition |
+| `services/email_formatter.py` | Email | `format_newsletter_html()` → HTML mobile-friendly |
+| `services/email_sender.py` | Email | `send_bulk_newsletter()` vía SendGrid Personalizations API |
+| `services/technical_analyzer.py` | Análisis técnico | SMA20, SMA50, RSI14, MACD, soporte, resistencia vía yfinance |
+| `services/alerts_engine.py` | Worker | APScheduler: alertas 17:35 diario + reportes PRO lunes 08:00 |
+| `services/monitoring.py` | Monitoring | `send_error_alert()` + `@monitor_errors` con rate limiting 1h |
+| `services/backtester.py` | PRO | Backtest determinista, estrategias JSON, límite 3/mes |
+| `services/fundamental_analyzer.py` | PRO | `fundamental_data()` + `data_quality_score()` vía yfinance |
+| `services/portfolio_tracker.py` | PRO | `add_position`, `close_position`, `portfolio_summary` con benchmark IBEX |
+| `services/reporter.py` | PRO | `generate_weekly_report(user_id)` → PDF |
+| `api/flask_app.py` | App factory | Crea Flask app, registra 6 blueprints |
+| `api/auth.py` | Blueprint | `/auth/register`, `/auth/login` |
+| `api/newsletter.py` | Blueprint | `/register` (legacy), `/api/v1/newsletter/latest`, `/health`, `/dashboard.html` |
+| `api/premium.py` | Blueprint | `/api/v1/alerts`, `/api/v1/technical/<symbol>` (tier premium/pro) |
+| `api/pro.py` | Blueprint | Estrategias, backtests, portfolios, reporte semanal (tier pro) |
+| `api/stripe.py` | Blueprint | `/stripe/create-checkout`, `/stripe/webhook` |
+| `api/admin.py` | Blueprint | `/admin/metrics` (protegido por ADMIN_API_KEY) |
+| `api/helpers.py` | Helpers | `get_db()`, `require_premium()`, `require_pro()` |
+| `frontend/dashboard.html` | Dashboard | SPA vanilla: auth, indicadores técnicos, alertas, upgrade |
+| `frontend/admin_dashboard.html` | Admin | KPIs en tiempo real — actualización cada 5 min |
+
+## Sistema completo en Railway
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Railway.app                             │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Servicio: web                                           │   │
+│  │  gunicorn api.flask_app:app --workers 2 --bind 0.0.0.0:$PORT│
+│  │                                                          │   │
+│  │  /auth/*         → Blueprint auth (JWT)                  │   │
+│  │  /api/v1/alerts  → Blueprint premium (APScheduler)       │   │
+│  │  /api/v1/technical/<symbol>                              │   │
+│  │  /stripe/*       → Blueprint stripe (webhooks)           │   │
+│  │  /api/v1/newsletter/latest                               │   │
+│  │  /health         → {db, sendgrid, stripe, timestamp}     │   │
+│  │  /dashboard.html → SPA vanilla                           │   │
+│  │  /api/v1/strategies, /backtest (PRO)                     │   │
+│  │  /api/v1/portfolios, /reports/weekly (PRO)               │   │
+│  │  /admin/metrics  → KPIs (X-Admin-Key)                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Servicio: worker                                        │   │
+│  │  python services/alerts_engine.py                        │   │
+│  │                                                          │   │
+│  │  17:35 Madrid → _evaluate_alerts() (diario)             │   │
+│  │  Lunes 08:00  → _generate_weekly_reports() (semanal)    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌──────────────────────┐                                       │
+│  │  PostgreSQL plugin   │ ← DATABASE_URL auto-configurado       │
+│  └──────────────────────┘                                       │
+└─────────────────────────────────────────────────────────────────┘
+         ↑
+         │ GitHub Actions (17:35 Madrid, días laborables)
+         │ pipeline PDF + newsletter
+```
 
 ## Datos y outputs
 
 ```
 data/
-  raw/          ← JSONs descargados por el Recopilador (precios, noticias)
-  analysis/     ← JSONs procesados por el Analista (señales, métricas)
-                   + newsletter_YYYY-MM-DD.json (generado por _run_newsletter)
+  raw/          ← JSONs del Recopilador (precios, noticias)
+  analysis/     ← JSONs del Analista + newsletter_YYYY-MM-DD.json
 
-output/         ← Informes finales (PDF o HTML), un archivo por día
+output/         ← Informes PDF diarios + reportes semanales PRO
 logs/           ← Log de cada ejecución: run_YYYY-MM-DD.log
-db/             ← Modelos SQLAlchemy (la DB real vive en PostgreSQL)
-services/       ← Formateador HTML y sender de email
-api/            ← API Flask
 ```
 
-## Variables de entorno necesarias
+## Variables de entorno
 
-| Variable | Obligatoria | Descripción |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Sí | Clave API de Anthropic |
-| `DATABASE_URL` | Sí | URL PostgreSQL. Sin ella el newsletter se omite (no crashea el pipeline) |
-| `SENDGRID_API_KEY` | Sí (newsletter) | Clave API de SendGrid |
-| `SENDGRID_FROM_EMAIL` | Sí (newsletter) | Email remitente verificado en SendGrid |
-| `JWT_SECRET_KEY` | Sí (API Fase 2) | Clave secreta para firmar tokens JWT — mínimo 32 chars |
-| `STRIPE_SECRET_KEY` | Sí (pagos) | Clave secreta de Stripe (`sk_test_...` o `sk_live_...`) |
-| `STRIPE_WEBHOOK_SECRET` | Sí (pagos) | Signing secret del webhook de Stripe (`whsec_...`) |
-| `STRIPE_PREMIUM_PRICE_ID` | Sí (pagos) | Price ID del plan Premium en Stripe (`price_...`) |
-| `STRIPE_PRO_PRICE_ID` | Sí (tier pro) | Price ID del plan PRO en Stripe (`price_...`) |
-| `STRIPE_SUCCESS_URL` | Opcional | URL de redirección tras pago exitoso (default: `/dashboard.html`) |
-| `STRIPE_CANCEL_URL` | Opcional | URL de redirección si se cancela el pago (default: `/dashboard.html`) |
-| `ALERTS_TIMEZONE` | Opcional | Timezone del motor de alertas (default: `Europe/Madrid`) |
-| `ALERTS_HOUR` | Opcional | Hora de evaluación de alertas (default: `17`) |
-| `ALERTS_MINUTE` | Opcional | Minuto de evaluación de alertas (default: `35`) |
-| `FINNHUB_API_KEY` | Opcional | Para noticias adicionales |
-| `FORCE_RUN` | Opcional | `true` para ignorar horario de mercado |
+Ver `DEPLOY.md` para lista completa con descripción y fuentes.
 
-## Arquitectura de servicios (Fases 2 y 3)
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          API Flask                                   │
-│  /auth/register   /auth/login                                        │
-│  /api/v1/alerts   /api/v1/technical/<symbol>          (PREMIUM)      │
-│  /stripe/create-checkout   /stripe/webhook                           │
-│  /api/v1/newsletter/latest   /health   /dashboard.html               │
-│  /api/v1/strategies   /api/v1/backtest                (PRO)          │
-│  /api/v1/portfolios   /api/v1/reports/weekly          (PRO)          │
-└──────────┬──────────────────────────────────┬────────────────────────┘
-           │                                  │
-           ▼                                  ▼
-    PostgreSQL DB                       Stripe API
-    (users, alerts,                     (checkout sessions,
-    subscriptions,                      webhooks → tier premium/pro)
-    newsletter_subscribers,
-    strategies, backtest_results,
-    portfolios, portfolio_positions)
-           │
-           ▼
- alerts_engine.py (worker)
- APScheduler 17:35 Madrid
- → technical_analyzer.py
- → email_sender.py (alertas)
-```
-
-**Workers independientes:**
-- `python api/flask_app.py` — API REST (o `gunicorn api.flask_app:app` en producción)
-- `python services/alerts_engine.py` — evaluación diaria de alertas
-
-## Ejecución automática
-
-- **GitHub Actions** dispara el workflow en días laborables a las 17:35 Madrid
-- Variables de entorno necesarias: definidas en `.env` local o secrets de GitHub
-- Para ejecutar fuera de horario: `FORCE_RUN=true python main.py`
-- El motor de alertas corre como worker separado en Railway (no en GitHub Actions)
-
-## Informe generado (estructura actual — 7 páginas)
+## Informe generado (estructura — 7 páginas)
 
 1. Cabecera macro (10 indicadores)
 2. Tabla resumen IBEX 35 (precio, variación, volumen, señal técnica)

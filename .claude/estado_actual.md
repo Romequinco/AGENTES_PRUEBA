@@ -1,116 +1,73 @@
 # Estado actual del sistema
 
-> Última actualización: 2026-04-22
+> Última actualización: 2026-04-23 — Fase 4 completa
 
-## Estado general: FUNCIONAL
+## Estado general: LISTO PARA PRODUCCIÓN
 
-El pipeline completo está operativo. GitHub Actions ejecuta el sistema diariamente en días laborables a las 17:35 (cierre IBEX 35). La capa de newsletter por email (Fase 1) está construida y verificada en local.
+El sistema completo está operativo en local y preparado para deploy en Railway. Pipeline diario, newsletter, tiers Premium y PRO, y toda la infraestructura de producción están implementados y verificados.
 
 ---
 
-## Qué funciona
+## Qué funciona (4 fases)
 
-- Pipeline completo: Recopilador → Analista → Redactor → Validación
-- Informe de 7 páginas con estructura institucional
-- Gráfico de 52 semanas del IBEX
-- Mapa de calor sectorial (con leyenda corregida)
-- Limpieza automática de datos del run anterior al inicio de cada ejecución
-- Ejecución fuera de horario con `FORCE_RUN=true`
-- GitHub Actions con variables de entorno/secrets configurados
-- **Newsletter por email (Fase 1):** pipeline completo probado en local y funcionando
+### Pipeline principal (siempre activo)
+- Recopilador → Analista → Redactor → Validación por el Orquestador
+- Informe PDF de 7 páginas con estructura institucional
+- Gráfico 52 semanas, mapa de calor sectorial, atribución sectorial
+- GitHub Actions: ejecución automática días laborables al cierre del IBEX
 
-## Trabajo reciente completado (sesión 2026-04-21 — Fase 1 Newsletter)
+### Capa de newsletter — Fase 1
+- Modelos PostgreSQL: `User`, `NewsletterSubscriber`
+- HTML mobile-friendly generado automáticamente
+- Envío batch vía SendGrid Personalizations API
+- API Flask: `/register`, `/api/v1/newsletter/latest`, `/health`
 
-- `db/models.py` — modelos SQLAlchemy: tablas `users` y `newsletter_subscribers` con PostgreSQL
-- `agents/writer.py` — añadida función `generate_newsletter_data(analysis_json)` fuera de la clase `WriterAgent`
-- `services/email_formatter.py` — `format_newsletter_html()` genera HTML mobile-friendly con métricas, mejores/peores del día, idea del día y link de unsubscribe
-- `services/email_sender.py` — `send_bulk_newsletter()` usa SendGrid Personalizations API (1 request por batch, no loop por destinatario)
-- `main.py` — añadida `_run_newsletter()` que se ejecuta después del PDF, falla silenciosamente sin afectar el pipeline
-- `api/flask_app.py` — API Flask mínima: `POST /register`, `GET /api/v1/newsletter/latest`, `GET /health`
-- `requirements.txt` — añadidos: SQLAlchemy, psycopg2-binary, Flask, Werkzeug, sendgrid
-- `.env.example` — añadidas variables `DATABASE_URL`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`
-- Base de datos PostgreSQL local creada (`ibex_newsletter`) y tablas inicializadas
-- Verificado end-to-end: PDF generado + newsletter JSON guardado + email enviado via SendGrid
+### Auth + Premium + Stripe — Fase 2
+- JWT auth (`/auth/register`, `/auth/login`)
+- Alertas técnicas (precio, RSI) con motor APScheduler
+- Integración Stripe completa (checkout, webhooks, tiers)
+- Dashboard SPA vanilla en `frontend/dashboard.html`
 
-## Trabajo reciente completado (sesión 2026-04-22 — Fase 2 Premium)
+### Tier PRO — Fase 3
+- Backtester determinista con estrategias JSON (límite 3/mes)
+- Análisis fundamental via yfinance
+- Portfolio tracker con P&L y benchmark IBEX
+- Reporte semanal PDF bajo demanda
+- 9 endpoints PRO en la API
+- **48/48 tests passing**
 
-- `requirements.txt` — añadidos: flask-jwt-extended, bcrypt, stripe, apscheduler
-- `db/models.py` — nuevas tablas: `subscriptions` (Stripe), `alerts` (alertas técnicas); relaciones inversas en `User`
-- `services/technical_analyzer.py` — nuevo: `analyze(symbol)` → SMA20, SMA50, RSI14, MACD, soporte, resistencia via yfinance
-- `services/alerts_engine.py` — nuevo: worker APScheduler con SQLAlchemy job store; evalúa alertas a las 17:35 Madrid; falla claro si faltan env vars
-- `api/flask_app.py` — ampliado con: auth JWT (`/auth/register`, `/auth/login`), endpoints PREMIUM protegidos (alertas, análisis técnico), webhooks Stripe (checkout.session.completed, subscription.deleted, invoice.payment_failed)
-- `frontend/dashboard.html` — nuevo: SPA vanilla HTML/CSS/JS con auth, indicadores técnicos, gestión de alertas, botón de upgrade a Stripe
+### Producción — Fase 4
+- `railway.toml` + `Procfile`: 2 servicios (web + worker)
+- `gunicorn` como servidor WSGI de producción
+- `services/monitoring.py`: `send_error_alert()` + `@monitor_errors`
+- `/health` expandido: db, sendgrid, stripe, timestamp
+- Job semanal: reportes PRO cada lunes 08:00 Madrid
+- `/admin/metrics` protegido con `ADMIN_API_KEY`
+- `frontend/admin_dashboard.html`: KPIs en tiempo real
+- `DEPLOY.md`: guía paso a paso para Railway
 
-## Estado verificado end-to-end (sesión 2026-04-22)
+---
 
-Todos los endpoints de Fase 2 probados manualmente en local:
+## Arquitectura de servicios
 
-| Endpoint | Resultado |
-|---|---|
-| `POST /auth/register` | 201 + JWT |
-| `POST /auth/login` | 200 + JWT |
-| `GET /api/v1/technical/SAN.MC` | 200 + indicadores reales de yfinance |
-| `POST /api/v1/alerts` | 201 + alerta creada en DB |
-| `GET /api/v1/alerts` | 200 + lista de alertas |
-| `POST /stripe/create-checkout` | 200 + URL de checkout real |
-| Webhook `checkout.session.completed` | 200 + tier→premium en DB |
-| DB tras pago | `tier: premium`, `status: active`, `stripe_subscription_id` guardado |
+- **web**: `gunicorn api.flask_app:app` — API REST (Railway)
+- **worker**: `python services/alerts_engine.py` — alertas diarias 17:35 + reportes lunes 08:00
+- **GitHub Actions**: pipeline PDF + newsletter (17:35 Madrid, días laborables)
 
-## Trabajo reciente completado (sesión 2026-04-22 — Fase 3 PRO)
+## Variables de entorno requeridas
 
-- `tests/conftest.py` — añadido: add project root to sys.path para pytest
-- `tests/test_smoke.py` — reescrito: funciones pytest propias (era script standalone con sys.exit)
-- `tests/test_phase3.py` — nuevo: 24 tests unitarios (backtester, fundamental_analyzer)
-- `db/models.py` — ampliado: tablas `strategies`, `backtest_results`, `portfolios`, `portfolio_positions`
-- `services/backtester.py` — nuevo: backtest determinista, estrategias JSON, indicadores vectorizados
-- `services/fundamental_analyzer.py` — nuevo: fundamental_data() + data_quality_score()
-- `services/portfolio_tracker.py` — nuevo: add_position, close_position, portfolio_summary con P&L y benchmark IBEX
-- `services/reporter.py` — nuevo: generate_weekly_report() → PDF con reportlab
-- `api/flask_app.py` — ampliado: 9 endpoints PRO, _require_pro(), checkout soporte pro, webhook tier-aware
+Ver `DEPLOY.md` para la lista completa agrupada por servicio.
 
-Estado tests: **48/48 passing**
+## Próximos pasos
 
-## Pendiente / Próximos pasos
-
-- **Dashboard:** probar `frontend/dashboard.html` en el navegador con flujo completo de UI
-- **Deploy Railway:** añadir variables nuevas de Fase 3 (`STRIPE_PRO_PRICE_ID`) en Railway
-- **Motor de alertas:** añadir como worker en Railway (`python services/alerts_engine.py`)
-- **Fase 4:** automatización del reporte semanal, monitoring, deploy productivo
-
-## Limitaciones conocidas (Fase 2)
-
-- El `/register` legacy (Fase 1) usa werkzeug para el hash; `/auth/register` usa bcrypt — coexisten sin problema pero login detecta el formato del hash automáticamente
-- `STRIPE_WEBHOOK_SECRET` cambia cada vez que arranca el proxy local de Stripe CLI — en producción es fijo (configurado en el dashboard de Stripe)
-- El motor de alertas necesita `DATABASE_URL` y `SENDGRID_API_KEY` para arrancar — falla con error claro si faltan
-- Las carpetas `.claude/agents/`, `.claude/skills/` y `.claude/hooks/` están vacías — los agentes Claude están implementados como módulos Python en `agents/`, no como definiciones `.md`
-- No hay tests automatizados del output del informe (solo tests del código en `tests/`)
-- Añadir test de humo para `generate_newsletter_data()` y el endpoint `/api/v1/newsletter/latest`
+1. Ejecutar `DEPLOY.md` paso a paso en Railway
+2. Añadir `DATABASE_URL`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` a GitHub Secrets
+3. Verificar `/health` en el dominio `.railway.app`
 
 ## Limitaciones conocidas
 
-- GitHub Actions puede tener retrasos de 10-15 min en el cron (absorbido por la ventana 17:30–19:30)
-- yfinance puede tardar 30-60 min tras el cierre en reflejar el OHLCV del día → `get_last_market_date()` maneja este edge case
-- En las semanas de cambio de horario (marzo/octubre) ambos crons caen fuera de la estación correcta durante 1-2 días — efecto mínimo y autoresolutivo
-- `DATABASE_URL` debe ser PostgreSQL (no SQLite) — Railway tiene filesystem efímero; SQLite perdería datos en cada redeploy
-- El sender de SendGrid (`SENDGRID_FROM_EMAIL`) debe estar verificado en SendGrid antes del primer envío
-
-## Cómo ejecutar en local
-
-```bash
-# Instalación
-pip install -r requirements.txt
-cp .env.example .env  # y rellenar variables
-
-# Crear tablas en PostgreSQL (solo la primera vez)
-python -c "from dotenv import load_dotenv; load_dotenv(); from db.models import create_tables; create_tables()"
-
-# Ejecución normal (respeta horario de mercado)
-python main.py
-
-# Forzar ejecución fuera de horario (genera PDF + envía newsletter)
-$env:FORCE_RUN="true"; python main.py  # PowerShell
-FORCE_RUN=true python main.py          # bash/Linux
-
-# Arrancar la API Flask
-python api/flask_app.py
-```
+- GitHub Actions puede tener retrasos de 10-15 min en el cron
+- yfinance tarda 30-60 min tras el cierre en reflejar OHLCV del día
+- `DATABASE_URL` debe ser PostgreSQL — Railway tiene filesystem efímero
+- `SENDGRID_FROM_EMAIL` debe estar verificado en SendGrid antes del primer envío
+- `STRIPE_WEBHOOK_SECRET` es fijo en producción (configurado en dashboard Stripe)
