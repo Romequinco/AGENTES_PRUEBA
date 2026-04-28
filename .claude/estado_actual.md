@@ -1,6 +1,6 @@
 # Estado actual del sistema
 
-> Última actualización: 2026-04-28 — Auditoría de seguridad y rendimiento completada
+> Última actualización: 2026-04-28 — Sprint 1: capa de datos de mercado global
 
 ## Estado general: EN PRODUCCIÓN
 
@@ -37,6 +37,16 @@ El sistema completo está desplegado y operativo en Railway. Pipeline diario, ne
 - Reporte semanal PDF bajo demanda
 - 9 endpoints PRO en la API
 - **48/48 tests passing**
+
+### Sprint 1 — Datos de mercado global (2026-04-28)
+
+- `services/market_data.py`: `get_quote()` y `get_global_snapshot()` — índices, crypto, commodities, VIX
+- `api/market.py`: `GET /api/v1/market/global` y `GET /api/v1/market/quote/<symbol>` (endpoints públicos, sin auth)
+- `db/models.py`: `MarketDataCache` con índice compuesto `(symbol, fetched_at)` — TTL por tipo (5–15 min quotes, 24 h históricos)
+- **Alpha Vantage integrada** como tercera fuente de fallback en quotes (Finnhub → yfinance → AV)
+- `get_historical(symbol, period)` disponible para gráficos (AV TIME_SERIES_DAILY → yfinance fallback, TTL 24 h)
+- `ALPHA_VANTAGE_API_KEY` opcional en `.env` — 25 req/día free tier, solo se activa si las otras fuentes fallan
+- **56/56 tests passing** (8 nuevos en Sprint 1 + 4 Alpha Vantage)
 
 ### Producción — Fase 4
 - `railway.toml` + `Procfile`: 2 servicios (web + worker)

@@ -9,6 +9,7 @@ Blueprints registrados:
   api/pro.py         → /api/v1/strategies, /api/v1/backtest,             (tier pro)
                        /api/v1/portfolios, /api/v1/reports/weekly
   api/stripe.py      → /stripe/create-checkout, /stripe/webhook
+  api/market.py      → /api/v1/market/global, /api/v1/market/quote/<symbol>  (público)
 
 Para arrancar:
     python api/flask_app.py
@@ -32,6 +33,7 @@ from api.premium import premium_bp
 from api.pro import pro_bp
 from api.stripe import stripe_bp
 from api.admin import admin_bp
+from api.market import market_bp
 
 
 def create_app() -> Flask:
@@ -55,6 +57,7 @@ def create_app() -> Flask:
     app.register_blueprint(pro_bp)
     app.register_blueprint(stripe_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(market_bp)
 
     return app
 

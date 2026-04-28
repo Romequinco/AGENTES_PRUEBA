@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean,
-    DateTime, Float, ForeignKey, Enum as SAEnum, JSON, Date,
+    DateTime, Float, ForeignKey, Enum as SAEnum, JSON, Date, Index,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
@@ -143,6 +143,24 @@ class PortfolioPosition(Base):
     exit_date = Column(Date, nullable=True)
 
     portfolio = relationship("Portfolio", back_populates="positions")
+
+
+class MarketDataCache(Base):
+    __tablename__ = "market_data_cache"
+
+    id         = Column(Integer, primary_key=True)
+    symbol     = Column(String(30), nullable=False)
+    asset_type = Column(String(20), nullable=False)
+    data       = Column(JSON, nullable=False)
+    fetched_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_market_cache_symbol_fetched", "symbol", "fetched_at"),
+    )
 
 
 def create_tables():

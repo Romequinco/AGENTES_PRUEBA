@@ -185,7 +185,8 @@ Ver `DEPLOY.md` para la guía completa. Resumen:
 | `FORCE_RUN` | No | `true` para ignorar validación de horario |
 | `MAX_RETRIES` | No | Reintentos por agente (default: 3) |
 | `IBEX_CACHE_DAYS` | No | Días de validez de la caché del IBEX (default: 7) |
-| `FINNHUB_API_KEY` | No | Para noticias adicionales |
+| `FINNHUB_API_KEY` | No | Fuente primaria de quotes en tiempo real |
+| `ALPHA_VANTAGE_API_KEY` | No | Fallback de quotes + datos históricos diarios (25 req/día free) |
 | `ALERTS_TIMEZONE` | No | Zona horaria del motor de alertas (default: Europe/Madrid) |
 | `ALERTS_HOUR` / `ALERTS_MINUTE` | No | Hora de evaluación (default: 17:35) |
 | `PORT` | No | Railway lo asigna automáticamente |
