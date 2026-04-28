@@ -53,6 +53,20 @@ La capa de newsletter se ejecuta **después** del pipeline principal y nunca lo 
 | `services/technical_analyzer.py` | SMA20, SMA50, RSI14, MACD via yfinance |
 | `frontend/dashboard.html` | SPA vanilla: auth, indicadores, alertas, upgrade |
 
+## Portfolio Tracker Global (Sprint 2 — operativo, tier gratuito)
+
+Accesible para cualquier usuario autenticado (free, premium, pro).
+
+| Módulo | Rol |
+|---|---|
+| `services/portfolio_tracker.py` | `add_position`, `get_positions`, `update_position`, `delete_position`, `portfolio_summary` — multi-asset |
+| `api/portfolio.py` | Blueprint `/api/v1/portfolio/*` — 5 endpoints REST, JWT sin tier |
+| `db/migrations/002_portfolio_global.sql` | Migración: `asset_type`, `exchange`, `user_id`, `created_at` en `portfolio_positions` |
+
+**Asset types:** `stock`, `etf`, `crypto`, `commodity`. Precios via `get_quote()` de `market_data.py`.
+**Benchmarks:** `^GSPC` (S&P 500, por defecto), `^IBEX`, `^IXIC`. Configurable en `/summary?benchmark=`.
+**Migración Railway:** `psql $DATABASE_URL < db/migrations/002_portfolio_global.sql`
+
 ## Tier PRO (Fase 3 — operativa)
 
 Funcionalidades exclusivas para `tier = 'pro'`. No afectan al pipeline principal.
@@ -61,7 +75,6 @@ Funcionalidades exclusivas para `tier = 'pro'`. No afectan al pipeline principal
 |---|---|
 | `services/backtester.py` | `backtest(symbol, strategy_dict, days)` — determinista, JSON |
 | `services/fundamental_analyzer.py` | `fundamental_data(symbol)` + `data_quality_score()` |
-| `services/portfolio_tracker.py` | `add_position`, `close_position`, `portfolio_summary` |
 | `services/reporter.py` | `generate_weekly_report(user_id)` → PDF |
 
 **Formato de estrategia (JSON, no lambdas):**

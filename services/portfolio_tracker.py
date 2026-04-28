@@ -1,5 +1,6 @@
-"""Portfolio tracker — portfolios teóricos (sin dinero real ni brokers).
+"""Portfolio tracker global — multi-asset (stock, etf, crypto, commodity).
 
+Usa get_quote() de services/market_data.py para precios en tiempo real.
 Todas las funciones abren y cierran su propia sesión de DB.
 """
 
@@ -9,34 +10,47 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
-import yfinance as yf
-
 logger = logging.getLogger("bolsa.portfolio_tracker")
+
+VALID_ASSET_TYPES = {"stock", "etf", "crypto", "commodity"}
+
+BENCHMARK_LABELS = {
+    "^GSPC": "S&P 500",
+    "^IBEX": "IBEX 35",
+    "^IXIC": "Nasdaq",
+}
 
 
 def add_position(
-    portfolio_id: int,
+    user_id: int,
     symbol: str,
+    asset_type: str,
     quantity: float,
     entry_price: float,
     entry_date: date,
+    exchange: Optional[str] = None,
 ) -> dict:
-    """Añade una posición abierta al portfolio.
+    """Añade una posición al portfolio del usuario.
 
-    Returns:
-        dict con los datos de la posición creada.
+    Valida que el símbolo existe en el mercado antes de guardar.
+    Raises ValueError si el símbolo no se encuentra o asset_type es inválido.
     """
-    from db.models import Portfolio, PortfolioPosition, get_db_session
+    if asset_type not in VALID_ASSET_TYPES:
+        raise ValueError(f"asset_type inválido. Debe ser uno de: {', '.join(sorted(VALID_ASSET_TYPES))}")
 
+    from services.market_data import get_quote
+    quote = get_quote(symbol.upper(), asset_type)
+    if quote is None:
+        raise ValueError(f"Símbolo '{symbol}' no encontrado en los mercados")
+
+    from db.models import PortfolioPosition, get_db_session
     db = get_db_session()
     try:
-        portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
-        if not portfolio:
-            raise ValueError(f"Portfolio {portfolio_id} no encontrado")
-
         pos = PortfolioPosition(
-            portfolio_id=portfolio_id,
+            user_id=user_id,
             symbol=symbol.upper(),
+            asset_type=asset_type,
+            exchange=exchange,
             quantity=float(quantity),
             entry_price=float(entry_price),
             entry_date=entry_date,
@@ -52,28 +66,67 @@ def add_position(
         db.close()
 
 
-def close_position(
-    position_id: int,
-    exit_price: float,
-    exit_date: date,
-) -> dict:
-    """Cierra una posición registrando el precio y fecha de salida.
+def get_positions(user_id: int) -> list[dict]:
+    """Retorna todas las posiciones abiertas del usuario con precio actual."""
+    from db.models import PortfolioPosition, get_db_session
+    from services.market_data import get_quote
 
-    Returns:
-        dict con los datos actualizados de la posición.
-    """
+    db = get_db_session()
+    try:
+        positions = (
+            db.query(PortfolioPosition)
+            .filter(
+                PortfolioPosition.user_id == user_id,
+                PortfolioPosition.exit_price.is_(None),
+            )
+            .order_by(PortfolioPosition.entry_date.desc())
+            .all()
+        )
+
+        result = []
+        for pos in positions:
+            current_price = None
+            try:
+                quote = get_quote(pos.symbol, pos.asset_type)
+                if quote:
+                    current_price = quote["price"]
+            except Exception as e:
+                logger.warning(f"No se pudo obtener precio de {pos.symbol}: {e}")
+            result.append(_position_to_dict(pos, current_price))
+        return result
+    finally:
+        db.close()
+
+
+def update_position(
+    position_id: int,
+    user_id: int,
+    quantity: Optional[float] = None,
+    entry_price: Optional[float] = None,
+    entry_date: Optional[date] = None,
+    exchange: Optional[str] = None,
+) -> dict:
+    """Edita campos de una posición existente. Valida ownership."""
     from db.models import PortfolioPosition, get_db_session
 
     db = get_db_session()
     try:
-        pos = db.query(PortfolioPosition).filter(PortfolioPosition.id == position_id).first()
+        pos = db.query(PortfolioPosition).filter(
+            PortfolioPosition.id == position_id,
+            PortfolioPosition.user_id == user_id,
+        ).first()
         if not pos:
             raise ValueError(f"Posición {position_id} no encontrada")
-        if pos.exit_price is not None:
-            raise ValueError(f"La posición {position_id} ya está cerrada")
 
-        pos.exit_price = float(exit_price)
-        pos.exit_date = exit_date
+        if quantity is not None:
+            pos.quantity = float(quantity)
+        if entry_price is not None:
+            pos.entry_price = float(entry_price)
+        if entry_date is not None:
+            pos.entry_date = entry_date
+        if exchange is not None:
+            pos.exchange = exchange
+
         db.commit()
         db.refresh(pos)
         return _position_to_dict(pos)
@@ -84,92 +137,123 @@ def close_position(
         db.close()
 
 
-def portfolio_summary(portfolio_id: int) -> dict:
-    """Calcula el resumen del portfolio con P&L y benchmark IBEX.
-
-    Returns:
-        dict con: portfolio_id, name, positions (lista), total_value,
-        total_pnl, total_pnl_pct, benchmark_ibex_pct.
-    """
-    from db.models import Portfolio, PortfolioPosition, get_db_session
+def delete_position(position_id: int, user_id: int) -> bool:
+    """Elimina una posición. Valida ownership. Retorna True si se eliminó."""
+    from db.models import PortfolioPosition, get_db_session
 
     db = get_db_session()
     try:
-        portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
-        if not portfolio:
-            raise ValueError(f"Portfolio {portfolio_id} no encontrado")
+        pos = db.query(PortfolioPosition).filter(
+            PortfolioPosition.id == position_id,
+            PortfolioPosition.user_id == user_id,
+        ).first()
+        if not pos:
+            return False
+        db.delete(pos)
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
+
+def portfolio_summary(user_id: int, benchmark: str = "^GSPC") -> dict:
+    """Calcula el resumen completo del portfolio con P&L y benchmark configurable.
+
+    Returns dict con: positions, pnl_by_asset_type, allocation, totales y benchmark.
+    """
+    from db.models import PortfolioPosition, get_db_session
+    from services.market_data import get_quote, get_historical
+
+    db = get_db_session()
+    try:
         positions = (
             db.query(PortfolioPosition)
-            .filter(PortfolioPosition.portfolio_id == portfolio_id)
+            .filter(
+                PortfolioPosition.user_id == user_id,
+                PortfolioPosition.exit_price.is_(None),
+            )
             .all()
         )
 
         if not positions:
             return {
-                "portfolio_id": portfolio_id,
-                "name": portfolio.name,
                 "positions": [],
-                "total_value": 0.0,
+                "pnl_by_asset_type": {},
+                "allocation": {},
                 "total_cost": 0.0,
+                "total_value": 0.0,
                 "total_pnl": 0.0,
                 "total_pnl_pct": None,
-                "benchmark_ibex_pct": None,
+                "benchmark": benchmark,
+                "benchmark_label": BENCHMARK_LABELS.get(benchmark, benchmark),
+                "benchmark_return_pct": None,
             }
-
-        # Determine oldest entry date for benchmark comparison
-        oldest_entry = min(p.entry_date for p in positions)
-
-        # Fetch live prices for open positions
-        open_symbols = list({p.symbol for p in positions if p.exit_price is None})
-        live_prices: dict[str, float] = {}
-        if open_symbols:
-            live_prices = _fetch_live_prices(open_symbols)
 
         position_details = []
         total_cost = 0.0
         total_value = 0.0
+        pnl_by_type: dict[str, dict] = {}
+        value_by_type: dict[str, float] = {}
 
         for pos in positions:
             cost = pos.quantity * pos.entry_price
-            total_cost += cost
+            current_price = None
+            try:
+                quote = get_quote(pos.symbol, pos.asset_type)
+                if quote:
+                    current_price = quote["price"]
+            except Exception as e:
+                logger.warning(f"No se pudo obtener precio de {pos.symbol}: {e}")
 
-            if pos.exit_price is not None:
-                current_price = pos.exit_price
-                status = "closed"
-            else:
-                current_price = live_prices.get(pos.symbol, pos.entry_price)
-                status = "open"
-
-            current_value = pos.quantity * current_price
-            total_value += current_value
-            pnl = current_value - cost
+            effective_price = current_price if current_price is not None else pos.entry_price
+            current_val = pos.quantity * effective_price
+            pnl = current_val - cost
             pnl_pct = (pnl / cost * 100) if cost > 0 else None
 
-            position_details.append({
-                **_position_to_dict(pos),
-                "current_price": round(current_price, 4),
-                "current_value": round(current_value, 4),
-                "cost": round(cost, 4),
-                "pnl": round(pnl, 4),
-                "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
-                "status": status,
-            })
+            total_cost += cost
+            total_value += current_val
+
+            atype = pos.asset_type
+            if atype not in pnl_by_type:
+                pnl_by_type[atype] = {"pnl": 0.0, "cost": 0.0}
+                value_by_type[atype] = 0.0
+            pnl_by_type[atype]["pnl"] += pnl
+            pnl_by_type[atype]["cost"] += cost
+            value_by_type[atype] += current_val
+
+            position_details.append(_position_to_dict(pos, current_price))
 
         total_pnl = total_value - total_cost
-        total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else None
+        total_pnl_pct = round(total_pnl / total_cost * 100, 2) if total_cost > 0 else None
 
-        benchmark_pct = _ibex_return_since(oldest_entry)
+        pnl_by_asset_type = {}
+        for atype, data in pnl_by_type.items():
+            pnl_by_asset_type[atype] = {
+                "pnl": round(data["pnl"], 4),
+                "pct": round(data["pnl"] / data["cost"] * 100, 2) if data["cost"] > 0 else None,
+            }
+
+        allocation = {}
+        if total_value > 0:
+            for atype, val in value_by_type.items():
+                allocation[atype] = round(val / total_value * 100, 2)
+
+        benchmark_return_pct = _benchmark_return(benchmark, get_historical)
 
         return {
-            "portfolio_id": portfolio_id,
-            "name": portfolio.name,
             "positions": position_details,
-            "total_value": round(total_value, 4),
+            "pnl_by_asset_type": pnl_by_asset_type,
+            "allocation": allocation,
             "total_cost": round(total_cost, 4),
+            "total_value": round(total_value, 4),
             "total_pnl": round(total_pnl, 4),
-            "total_pnl_pct": round(total_pnl_pct, 2) if total_pnl_pct is not None else None,
-            "benchmark_ibex_pct": benchmark_pct,
+            "total_pnl_pct": total_pnl_pct,
+            "benchmark": benchmark,
+            "benchmark_label": BENCHMARK_LABELS.get(benchmark, benchmark),
+            "benchmark_return_pct": benchmark_return_pct,
         }
     finally:
         db.close()
@@ -179,45 +263,42 @@ def portfolio_summary(portfolio_id: int) -> dict:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _position_to_dict(pos) -> dict:
+def _position_to_dict(pos, current_price: Optional[float] = None) -> dict:
+    cost = pos.quantity * pos.entry_price
+    pnl = None
+    pnl_pct = None
+    if current_price is not None:
+        pnl = round((current_price - pos.entry_price) * pos.quantity, 4)
+        pnl_pct = round((current_price - pos.entry_price) / pos.entry_price * 100, 2) if pos.entry_price else None
+
     return {
         "id": pos.id,
-        "portfolio_id": pos.portfolio_id,
+        "user_id": pos.user_id,
         "symbol": pos.symbol,
+        "asset_type": pos.asset_type,
+        "exchange": pos.exchange,
         "quantity": pos.quantity,
         "entry_price": pos.entry_price,
         "entry_date": str(pos.entry_date),
-        "exit_price": pos.exit_price,
-        "exit_date": str(pos.exit_date) if pos.exit_date else None,
+        "current_price": current_price,
+        "cost": round(cost, 4),
+        "pnl": pnl,
+        "pnl_pct": pnl_pct,
+        "created_at": pos.created_at.isoformat() if pos.created_at else None,
     }
 
 
-def _fetch_live_prices(symbols: list[str]) -> dict[str, float]:
-    prices = {}
-    for symbol in symbols:
-        try:
-            hist = yf.download(symbol, period="2d", progress=False, auto_adjust=True)
-            if not hist.empty:
-                close = hist["Close"].squeeze()
-                prices[symbol] = float(close.iloc[-1])
-        except Exception as e:
-            logger.warning(f"No se pudo obtener precio de {symbol}: {e}")
-    return prices
-
-
-def _ibex_return_since(start_date: date) -> Optional[float]:
-    """Calcula el retorno del IBEX 35 desde *start_date* hasta hoy."""
+def _benchmark_return(symbol: str, get_historical_fn) -> Optional[float]:
+    """Calcula el retorno del benchmark en el último mes."""
     try:
-        start_str = start_date.strftime("%Y-%m-%d")
-        hist = yf.download("^IBEX", start=start_str, progress=False, auto_adjust=True)
-        if hist.empty or len(hist) < 2:
+        bars = get_historical_fn(symbol, period="1m")
+        if not bars or len(bars) < 2:
             return None
-        close = hist["Close"].squeeze()
-        first = float(close.iloc[0])
-        last = float(close.iloc[-1])
-        if first <= 0:
+        first = bars[0].get("close") or bars[0].get("open")
+        last = bars[-1].get("close")
+        if not first or not last or first <= 0:
             return None
         return round((last - first) / first * 100, 2)
     except Exception as e:
-        logger.warning(f"Error calculando benchmark IBEX: {e}")
+        logger.warning(f"Error calculando benchmark {symbol}: {e}")
         return None

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IBEX 35 · Dashboard Premium</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; }
@@ -68,6 +69,52 @@
     .msg-ok { color: #22a55a; font-size: 0.82rem; margin-top: 8px; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #1a1a2e; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Portfolio */
+    .portfolio-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+    .portfolio-header h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+    .portfolio-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .portfolio-controls select { border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; }
+    .btn-add-pos { background: #22a55a; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; font-size: 0.82rem; }
+    .btn-add-pos:hover { background: #1a8a4a; }
+
+    .benchmark-bar { display: flex; align-items: center; gap: 16px; background: #f8f9fa; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem; flex-wrap: wrap; }
+    .benchmark-bar .metric { display: flex; flex-direction: column; }
+    .benchmark-bar .metric .label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: .4px; }
+    .benchmark-bar .metric .val { font-size: 1.1rem; font-weight: 700; }
+
+    .pnl-positive { color: #16a34a; }
+    .pnl-negative { color: #dc2626; }
+    .pnl-neutral  { color: #6b7280; }
+
+    .portfolio-table-wrap { overflow-x: auto; }
+    table.portfolio-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.portfolio-table th { text-align: left; padding: 7px 10px; color: #888; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid #eee; }
+    table.portfolio-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+    table.portfolio-table tr:last-child td { border-bottom: none; }
+    table.portfolio-table tfoot td { font-weight: 700; border-top: 2px solid #eee; background: #fafafa; }
+    .type-badge { background: #e9ecef; border-radius: 4px; padding: 2px 7px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .3px; }
+    .btn-del-pos { background: none; border: 1px solid #ddd; border-radius: 5px; color: #999; cursor: pointer; padding: 3px 8px; font-size: 0.72rem; }
+    .btn-del-pos:hover { background: #fee; border-color: #fcc; color: #c00; }
+
+    .portfolio-bottom { display: grid; grid-template-columns: 1fr 220px; gap: 16px; margin-top: 16px; }
+    @media (max-width: 600px) { .portfolio-bottom { grid-template-columns: 1fr; } }
+    .chart-wrap { display: flex; align-items: center; justify-content: center; }
+
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,.18); }
+    .modal h3 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .modal-grid .full { grid-column: 1 / -1; }
+    .modal label { display: block; font-size: 0.75rem; font-weight: 600; color: #555; margin-bottom: 3px; }
+    .modal input, .modal select { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; font-size: 0.85rem; }
+    .modal input:focus, .modal select:focus { outline: none; border-color: #1a1a2e; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .btn-cancel { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-size: 0.85rem; }
+    .btn-save { background: #1a1a2e; color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+    .btn-save:hover { background: #16213e; }
   </style>
 </head>
 <body>
@@ -139,6 +186,106 @@
     <ul class="alert-list" id="alert-list"></ul>
   </div>
 
+  <!-- PORTFOLIO -->
+  <div id="portfolio-section" class="card" style="display:none">
+    <div class="portfolio-header">
+      <h2>Mi cartera</h2>
+      <div class="portfolio-controls">
+        <select id="benchmark-select" onchange="loadPortfolio(this.value)">
+          <option value="^GSPC">vs S&amp;P 500</option>
+          <option value="^IBEX">vs IBEX 35</option>
+          <option value="^IXIC">vs Nasdaq</option>
+        </select>
+        <button class="btn-add-pos" onclick="openAddModal()">+ Añadir posición</button>
+      </div>
+    </div>
+
+    <div id="benchmark-bar" class="benchmark-bar" style="display:none">
+      <div class="metric">
+        <span class="label">Cartera</span>
+        <span class="val" id="bm-portfolio">—</span>
+      </div>
+      <div style="color:#ddd;font-size:1.2rem">|</div>
+      <div class="metric">
+        <span class="label" id="bm-label">S&amp;P 500</span>
+        <span class="val" id="bm-benchmark">—</span>
+      </div>
+      <div class="metric" style="margin-left:auto">
+        <span class="label">P&amp;L Total</span>
+        <span class="val" id="bm-pnl-total">—</span>
+      </div>
+    </div>
+
+    <div id="portfolio-msg"></div>
+
+    <div class="portfolio-table-wrap">
+      <table class="portfolio-table" id="portfolio-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Activo</th><th>Tipo</th><th>Cantidad</th>
+            <th>P. Compra</th><th>P. Actual</th>
+            <th>P&amp;L €</th><th>P&amp;L %</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="portfolio-tbody"></tbody>
+        <tfoot id="portfolio-tfoot"></tfoot>
+      </table>
+      <div id="portfolio-empty" class="empty-state" style="display:none">
+        No tienes posiciones. ¡Añade tu primera inversión!
+      </div>
+    </div>
+
+    <div class="portfolio-bottom" id="portfolio-bottom" style="display:none">
+      <div id="allocation-detail"></div>
+      <div class="chart-wrap">
+        <canvas id="allocation-chart" width="200" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal: añadir posición -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <h3>Añadir posición</h3>
+    <div class="modal-grid">
+      <div class="full">
+        <label>Símbolo</label>
+        <input type="text" id="pos-symbol" placeholder="AAPL, BTC-USD, GLD..." maxlength="20" style="text-transform:uppercase">
+      </div>
+      <div>
+        <label>Tipo de activo</label>
+        <select id="pos-asset-type">
+          <option value="stock">Acción (stock)</option>
+          <option value="etf">ETF</option>
+          <option value="crypto">Cripto</option>
+          <option value="commodity">Materia prima</option>
+        </select>
+      </div>
+      <div>
+        <label>Exchange (opcional)</label>
+        <input type="text" id="pos-exchange" placeholder="NASDAQ, BME...">
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input type="number" id="pos-quantity" placeholder="10" step="any" min="0">
+      </div>
+      <div>
+        <label>Precio de compra</label>
+        <input type="number" id="pos-price" placeholder="175.50" step="any" min="0">
+      </div>
+      <div class="full">
+        <label>Fecha de compra</label>
+        <input type="date" id="pos-date">
+      </div>
+    </div>
+    <div id="modal-msg"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn-save" onclick="submitAddPosition()">Guardar</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -171,6 +318,7 @@ function showAuth() {
   document.getElementById('upgrade-banner').style.display = 'none';
   document.getElementById('technical-section').style.display = 'none';
   document.getElementById('alerts-section').style.display = 'none';
+  document.getElementById('portfolio-section').style.display = 'none';
   document.getElementById('btn-logout').style.display = 'none';
   document.getElementById('tier-badge').style.display = 'none';
   document.getElementById('user-email').textContent = '';
@@ -179,6 +327,7 @@ function showAuth() {
 function showDashboard(user) {
   document.getElementById('auth-section').style.display = 'none';
   document.getElementById('btn-logout').style.display = 'inline-block';
+  document.getElementById('portfolio-section').style.display = 'block';
   if (user) {
     document.getElementById('user-email').textContent = user.email;
     const badge = document.getElementById('tier-badge');
@@ -195,6 +344,7 @@ function showDashboard(user) {
       document.getElementById('technical-section').style.display = 'none';
       document.getElementById('alerts-section').style.display = 'none';
     }
+    loadPortfolio();
   }
 }
 
@@ -343,6 +493,188 @@ async function deleteAlert(id) {
     if (r.ok) loadAlerts();
   } catch(e) {}
 }
+
+// ---------- Portfolio ----------
+let allocationChart = null;
+
+async function loadPortfolio(benchmark) {
+  if (!benchmark) benchmark = document.getElementById('benchmark-select').value;
+  const msgEl = document.getElementById('portfolio-msg');
+  msgEl.textContent = '';
+
+  try {
+    const r = await fetch(API + '/api/v1/portfolio/summary?benchmark=' + encodeURIComponent(benchmark), {
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    const data = await r.json();
+    if (!r.ok) { msgEl.innerHTML = `<p class="msg-error">${data.error || 'Error'}</p>`; return; }
+    renderPortfolioTable(data.positions);
+    renderBenchmarkIndicator(data.total_pnl_pct, data.benchmark_return_pct, data.benchmark_label);
+    renderAllocationChart(data.allocation);
+  } catch(e) {
+    msgEl.innerHTML = '<p class="msg-error">Error de red al cargar la cartera</p>';
+  }
+}
+
+function renderBenchmarkIndicator(portfolioPct, benchmarkPct, benchmarkLabel) {
+  const bar = document.getElementById('benchmark-bar');
+  if (portfolioPct == null && benchmarkPct == null) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const fmtPct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const cls = v => v == null ? 'pnl-neutral' : v >= 0 ? 'pnl-positive' : 'pnl-negative';
+  document.getElementById('bm-portfolio').className = 'val ' + cls(portfolioPct);
+  document.getElementById('bm-portfolio').textContent = fmtPct(portfolioPct);
+  document.getElementById('bm-label').textContent = benchmarkLabel || 'Benchmark';
+  document.getElementById('bm-benchmark').className = 'val ' + cls(benchmarkPct);
+  document.getElementById('bm-benchmark').textContent = fmtPct(benchmarkPct);
+}
+
+function renderPortfolioTable(positions) {
+  const table = document.getElementById('portfolio-table');
+  const empty = document.getElementById('portfolio-empty');
+  const bottom = document.getElementById('portfolio-bottom');
+  const tbody = document.getElementById('portfolio-tbody');
+  const tfoot = document.getElementById('portfolio-tfoot');
+
+  if (!positions || !positions.length) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    bottom.style.display = 'none';
+    tbody.innerHTML = '';
+    tfoot.innerHTML = '';
+    document.getElementById('bm-pnl-total').textContent = '—';
+    return;
+  }
+
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  bottom.style.display = 'grid';
+
+  const fmt2 = v => v != null ? v.toFixed(2) : '—';
+  const fmtPct = v => v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '—';
+  const pnlCls = v => v == null ? '' : v >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+  let totalCost = 0, totalPnl = 0;
+  tbody.innerHTML = positions.map(p => {
+    totalCost += p.cost || 0;
+    totalPnl += p.pnl || 0;
+    return `<tr>
+      <td><strong>${p.symbol}</strong>${p.exchange ? `<br><small style="color:#aaa">${p.exchange}</small>` : ''}</td>
+      <td><span class="type-badge">${p.asset_type}</span></td>
+      <td>${p.quantity}</td>
+      <td>${fmt2(p.entry_price)}</td>
+      <td>${p.current_price != null ? fmt2(p.current_price) : '<span class="spinner"></span>'}</td>
+      <td class="${pnlCls(p.pnl)}">${p.pnl != null ? (p.pnl >= 0 ? '+' : '') + fmt2(p.pnl) : '—'}</td>
+      <td class="${pnlCls(p.pnl_pct)}">${fmtPct(p.pnl_pct)}</td>
+      <td><button class="btn-del-pos" onclick="deletePosition(${p.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const totalPnlPct = totalCost > 0 ? totalPnl / totalCost * 100 : null;
+  tfoot.innerHTML = `<tr>
+    <td colspan="5">Total</td>
+    <td class="${pnlCls(totalPnl)}">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</td>
+    <td class="${pnlCls(totalPnlPct)}">${fmtPct(totalPnlPct)}</td>
+    <td></td>
+  </tr>`;
+
+  document.getElementById('bm-pnl-total').className = 'val ' + pnlCls(totalPnl);
+  document.getElementById('bm-pnl-total').textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' €';
+}
+
+function renderAllocationChart(allocation) {
+  const canvas = document.getElementById('allocation-chart');
+  const detail = document.getElementById('allocation-detail');
+  if (!allocation || !Object.keys(allocation).length) {
+    canvas.style.display = 'none'; detail.innerHTML = ''; return;
+  }
+  canvas.style.display = 'block';
+
+  const COLORS = { stock: '#1a1a2e', etf: '#3a86ff', crypto: '#f6c90e', commodity: '#ff6b6b' };
+  const labels = Object.keys(allocation);
+  const values = labels.map(k => allocation[k]);
+  const colors = labels.map(k => COLORS[k] || '#888');
+
+  if (allocationChart) allocationChart.destroy();
+  allocationChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2 }] },
+    options: {
+      plugins: { legend: { display: false } },
+      cutout: '60%',
+    }
+  });
+
+  detail.innerHTML = labels.map((k, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:0.82rem">
+      <span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0"></span>
+      <span style="text-transform:capitalize">${k}</span>
+      <span style="margin-left:auto;font-weight:700">${values[i].toFixed(1)}%</span>
+    </div>`).join('');
+}
+
+async function deletePosition(id) {
+  if (!confirm('¿Eliminar esta posición?')) return;
+  try {
+    const r = await fetch(API + '/api/v1/portfolio/positions/' + id, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    if (r.ok || r.status === 204) loadPortfolio();
+    else {
+      const d = await r.json();
+      alert(d.error || 'Error al eliminar');
+    }
+  } catch(e) { alert('Error de red'); }
+}
+
+function openAddModal() {
+  document.getElementById('pos-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('modal-msg').textContent = '';
+  document.getElementById('pos-symbol').value = '';
+  document.getElementById('pos-quantity').value = '';
+  document.getElementById('pos-price').value = '';
+  document.getElementById('pos-exchange').value = '';
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function closeAddModal() {
+  document.getElementById('add-modal').classList.remove('open');
+}
+
+async function submitAddPosition() {
+  const msgEl = document.getElementById('modal-msg');
+  msgEl.textContent = '';
+  const symbol = document.getElementById('pos-symbol').value.trim().toUpperCase();
+  const asset_type = document.getElementById('pos-asset-type').value;
+  const quantity = parseFloat(document.getElementById('pos-quantity').value);
+  const entry_price = parseFloat(document.getElementById('pos-price').value);
+  const entry_date = document.getElementById('pos-date').value;
+  const exchange = document.getElementById('pos-exchange').value.trim() || null;
+
+  if (!symbol || isNaN(quantity) || isNaN(entry_price) || !entry_date) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Completa todos los campos obligatorios'; return;
+  }
+
+  try {
+    const r = await fetch(API + '/api/v1/portfolio/positions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ symbol, asset_type, quantity, entry_price, entry_date, exchange })
+    });
+    const data = await r.json();
+    if (!r.ok) { msgEl.className = 'msg-error'; msgEl.textContent = data.error || 'Error'; return; }
+    closeAddModal();
+    loadPortfolio();
+  } catch(e) {
+    msgEl.className = 'msg-error'; msgEl.textContent = 'Error de red';
+  }
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('add-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAddModal();
+});
 
 // ---------- Stripe ----------
 async function createCheckout() {

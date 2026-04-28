@@ -7,7 +7,8 @@ Blueprints registrados:
   api/newsletter.py  → /register (legacy), /api/v1/newsletter/latest, /health, /dashboard.html
   api/premium.py     → /api/v1/alerts, /api/v1/technical/<symbol>       (tier premium/pro)
   api/pro.py         → /api/v1/strategies, /api/v1/backtest,             (tier pro)
-                       /api/v1/portfolios, /api/v1/reports/weekly
+                       /api/v1/reports/weekly
+  api/portfolio.py   → /api/v1/portfolio/positions, /api/v1/portfolio/summary  (gratuito)
   api/stripe.py      → /stripe/create-checkout, /stripe/webhook
   api/market.py      → /api/v1/market/global, /api/v1/market/quote/<symbol>  (público)
 
@@ -31,6 +32,7 @@ from api.auth import auth_bp
 from api.newsletter import newsletter_bp
 from api.premium import premium_bp
 from api.pro import pro_bp
+from api.portfolio import portfolio_bp
 from api.stripe import stripe_bp
 from api.admin import admin_bp
 from api.market import market_bp
@@ -55,6 +57,7 @@ def create_app() -> Flask:
     app.register_blueprint(newsletter_bp)
     app.register_blueprint(premium_bp)
     app.register_blueprint(pro_bp)
+    app.register_blueprint(portfolio_bp)
     app.register_blueprint(stripe_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(market_bp)

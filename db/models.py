@@ -41,6 +41,12 @@ class User(Base):
     strategies = relationship("Strategy", back_populates="user")
     backtest_results = relationship("BacktestResult", back_populates="user")
     portfolios = relationship("Portfolio", back_populates="user")
+    positions = relationship(
+        "PortfolioPosition",
+        foreign_keys="PortfolioPosition.user_id",
+        backref="owner",
+        lazy=True,
+    )
 
 
 class NewsletterSubscriber(Base):
@@ -134,13 +140,17 @@ class PortfolioPosition(Base):
     __tablename__ = "portfolio_positions"
 
     id = Column(Integer, primary_key=True, index=True)
-    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     symbol = Column(String(20), nullable=False)
+    asset_type = Column(String(20), nullable=False, default="stock")
+    exchange = Column(String(50), nullable=True)
     quantity = Column(Float, nullable=False)
     entry_price = Column(Float, nullable=False)
     entry_date = Column(Date, nullable=False)
     exit_price = Column(Float, nullable=True)
     exit_date = Column(Date, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     portfolio = relationship("Portfolio", back_populates="positions")
 

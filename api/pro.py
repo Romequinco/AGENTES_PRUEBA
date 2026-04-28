@@ -5,11 +5,9 @@ Endpoints (sin prefijo, todos requieren JWT + tier pro):
   GET  /api/v1/strategies                                    → listar estrategias
   POST /api/v1/backtest                                      → ejecutar backtest (límite 3/mes)
   GET  /api/v1/backtest/<id>                                 → resultado de un backtest
-  POST /api/v1/portfolios                                    → crear portfolio
-  POST /api/v1/portfolios/<id>/positions                     → añadir posición
-  PUT  /api/v1/portfolios/<id>/positions/<pos_id>/close      → cerrar posición
-  GET  /api/v1/portfolios/<id>/summary                       → resumen con P&L y benchmark
   GET  /api/v1/reports/weekly                                → genera y devuelve PDF semanal
+
+Los endpoints de portfolio se han movido a api/portfolio.py (acceso gratuito).
 """
 
 import datetime
@@ -203,152 +201,6 @@ def get_backtest(backtest_id: int):
         }), 200
     finally:
         db.close()
-
-
-# ---------------------------------------------------------------------------
-# Portfolios
-# ---------------------------------------------------------------------------
-
-@pro_bp.route("/api/v1/portfolios", methods=["POST"])
-@jwt_required()
-def create_portfolio():
-    user_id = int(get_jwt_identity())
-    user, err = require_pro(user_id)
-    if err:
-        return err
-
-    data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name es obligatorio"}), 400
-
-    from db.models import Portfolio
-    db = get_db()
-    try:
-        portfolio = Portfolio(user_id=user_id, name=name)
-        db.add(portfolio)
-        db.commit()
-        db.refresh(portfolio)
-        return jsonify({
-            "id": portfolio.id,
-            "name": portfolio.name,
-            "created_at": portfolio.created_at.isoformat() if portfolio.created_at else None,
-        }), 201
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-@pro_bp.route("/api/v1/portfolios/<int:portfolio_id>/positions", methods=["POST"])
-@jwt_required()
-def add_position(portfolio_id: int):
-    user_id = int(get_jwt_identity())
-    user, err = require_pro(user_id)
-    if err:
-        return err
-
-    from db.models import Portfolio
-    db = get_db()
-    try:
-        p = db.query(Portfolio).filter(Portfolio.id == portfolio_id, Portfolio.user_id == user_id).first()
-        if not p:
-            return jsonify({"error": "portfolio no encontrado"}), 404
-    finally:
-        db.close()
-
-    data = request.get_json(silent=True) or {}
-    symbol = (data.get("symbol") or "").strip().upper()
-    quantity = data.get("quantity")
-    entry_price = data.get("entry_price")
-    entry_date_str = data.get("entry_date")
-
-    if not symbol:
-        return jsonify({"error": "symbol es obligatorio"}), 400
-    if quantity is None or entry_price is None or not entry_date_str:
-        return jsonify({"error": "quantity, entry_price y entry_date son obligatorios"}), 400
-
-    try:
-        entry_date = datetime.date.fromisoformat(entry_date_str)
-        from services.portfolio_tracker import add_position as _add_position
-        pos = _add_position(portfolio_id, symbol, float(quantity), float(entry_price), entry_date)
-        return jsonify(pos), 201
-    except (ValueError, TypeError) as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        current_app.logger.error(f"/portfolios/{portfolio_id}/positions error: {e}", exc_info=True)
-        return jsonify({"error": "error añadiendo posición"}), 500
-
-
-@pro_bp.route("/api/v1/portfolios/<int:portfolio_id>/positions/<int:position_id>/close", methods=["PUT"])
-@jwt_required()
-def close_position(portfolio_id: int, position_id: int):
-    user_id = int(get_jwt_identity())
-    user, err = require_pro(user_id)
-    if err:
-        return err
-
-    from db.models import Portfolio, PortfolioPosition
-    db = get_db()
-    try:
-        p = db.query(Portfolio).filter(Portfolio.id == portfolio_id, Portfolio.user_id == user_id).first()
-        if not p:
-            return jsonify({"error": "portfolio no encontrado"}), 404
-        pos = db.query(PortfolioPosition).filter(
-            PortfolioPosition.id == position_id,
-            PortfolioPosition.portfolio_id == portfolio_id,
-        ).first()
-        if not pos:
-            return jsonify({"error": "posición no encontrada"}), 404
-    finally:
-        db.close()
-
-    data = request.get_json(silent=True) or {}
-    exit_price = data.get("exit_price")
-    exit_date_str = data.get("exit_date")
-
-    if exit_price is None or not exit_date_str:
-        return jsonify({"error": "exit_price y exit_date son obligatorios"}), 400
-
-    try:
-        exit_date = datetime.date.fromisoformat(exit_date_str)
-        from services.portfolio_tracker import close_position as _close_position
-        result = _close_position(position_id, float(exit_price), exit_date)
-        return jsonify(result), 200
-    except (ValueError, TypeError) as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        current_app.logger.error(
-            f"/portfolios/{portfolio_id}/positions/{position_id}/close error: {e}", exc_info=True
-        )
-        return jsonify({"error": "error cerrando posición"}), 500
-
-
-@pro_bp.route("/api/v1/portfolios/<int:portfolio_id>/summary", methods=["GET"])
-@jwt_required()
-def portfolio_summary_endpoint(portfolio_id: int):
-    user_id = int(get_jwt_identity())
-    user, err = require_pro(user_id)
-    if err:
-        return err
-
-    from db.models import Portfolio
-    db = get_db()
-    try:
-        p = db.query(Portfolio).filter(Portfolio.id == portfolio_id, Portfolio.user_id == user_id).first()
-        if not p:
-            return jsonify({"error": "portfolio no encontrado"}), 404
-    finally:
-        db.close()
-
-    try:
-        from services.portfolio_tracker import portfolio_summary
-        summary = portfolio_summary(portfolio_id)
-        return jsonify(summary), 200
-    except Exception as e:
-        current_app.logger.error(f"/portfolios/{portfolio_id}/summary error: {e}", exc_info=True)
-        return jsonify({"error": "error calculando resumen del portfolio"}), 500
 
 
 # ---------------------------------------------------------------------------
