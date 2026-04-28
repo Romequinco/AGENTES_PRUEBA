@@ -1,10 +1,12 @@
 # Estado actual del sistema
 
-> Última actualización: 2026-04-23 — Fase 4 completa
+> Última actualización: 2026-04-28 — Deploy en producción completado
 
-## Estado general: LISTO PARA PRODUCCIÓN
+## Estado general: EN PRODUCCIÓN
 
-El sistema completo está operativo en local y preparado para deploy en Railway. Pipeline diario, newsletter, tiers Premium y PRO, y toda la infraestructura de producción están implementados y verificados.
+El sistema completo está desplegado y operativo en Railway. Pipeline diario, newsletter, tiers Premium y PRO, y toda la infraestructura de producción verificados en producción real.
+
+**URL de producción:** `https://web-production-6a82d.up.railway.app`
 
 ---
 
@@ -58,11 +60,22 @@ El sistema completo está operativo en local y preparado para deploy en Railway.
 
 Ver `DEPLOY.md` para la lista completa agrupada por servicio.
 
+## Deploy realizado (2026-04-28)
+
+- Proyecto creado en Railway y conectado al repo GitHub
+- PostgreSQL provisionado y tablas creadas (`Base.metadata.create_all`)
+- Variables de entorno configuradas en servicios `web` y `worker`
+- Dominio generado: `web-production-6a82d.up.railway.app`
+- Webhook de Stripe configurado: `POST /stripe/webhook` con 3 eventos
+- `STRIPE_WEBHOOK_SECRET` actualizado en Railway con el signing secret real
+- GitHub Actions secrets configurados (ANTHROPIC_API_KEY, DATABASE_URL, SENDGRID_*, GMAIL_*)
+- `/health` verificado: `{"status":"ok","db":"connected","sendgrid":"configured","stripe":"configured"}`
+
 ## Próximos pasos
 
-1. Ejecutar `DEPLOY.md` paso a paso en Railway
-2. Añadir `DATABASE_URL`, `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` a GitHub Secrets
-3. Verificar `/health` en el dominio `.railway.app`
+- Esperar primera ejecución automática (17:35 Madrid, día laborable) para verificar pipeline completo
+- Comprobar logs del worker en Railway → servicio `worker` → Logs
+- Opcional: forzar pipeline ahora desde GitHub → Actions → Run workflow
 
 ## Limitaciones conocidas
 
