@@ -14,11 +14,6 @@ import yfinance as yf
 logger = logging.getLogger("bolsa.portfolio_tracker")
 
 
-def _get_db():
-    from db.models import SessionLocal
-    return SessionLocal()
-
-
 def add_position(
     portfolio_id: int,
     symbol: str,
@@ -31,9 +26,9 @@ def add_position(
     Returns:
         dict con los datos de la posición creada.
     """
-    from db.models import Portfolio, PortfolioPosition
+    from db.models import Portfolio, PortfolioPosition, get_db_session
 
-    db = _get_db()
+    db = get_db_session()
     try:
         portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
         if not portfolio:
@@ -67,9 +62,9 @@ def close_position(
     Returns:
         dict con los datos actualizados de la posición.
     """
-    from db.models import PortfolioPosition
+    from db.models import PortfolioPosition, get_db_session
 
-    db = _get_db()
+    db = get_db_session()
     try:
         pos = db.query(PortfolioPosition).filter(PortfolioPosition.id == position_id).first()
         if not pos:
@@ -96,9 +91,9 @@ def portfolio_summary(portfolio_id: int) -> dict:
         dict con: portfolio_id, name, positions (lista), total_value,
         total_pnl, total_pnl_pct, benchmark_ibex_pct.
     """
-    from db.models import Portfolio, PortfolioPosition
+    from db.models import Portfolio, PortfolioPosition, get_db_session
 
-    db = _get_db()
+    db = get_db_session()
     try:
         portfolio = db.query(Portfolio).filter(Portfolio.id == portfolio_id).first()
         if not portfolio:

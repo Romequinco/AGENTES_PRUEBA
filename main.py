@@ -73,7 +73,10 @@ def get_last_market_date() -> str | None:
         if data.empty:
             return None
         return data.index[-1].strftime("%Y-%m-%d")
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"get_last_market_date: no se pudo obtener fecha de ^IBEX via yfinance: {e}"
+        )
         return None
 
 

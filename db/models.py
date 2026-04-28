@@ -79,7 +79,7 @@ class Alert(Base):
         nullable=False,
     )
     condition_value = Column(Float, nullable=False)
-    active = Column(Boolean, nullable=False, default=True)
+    active = Column(Boolean, nullable=False, default=True, index=True)
     triggered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -112,7 +112,7 @@ class BacktestResult(Base):
     win_rate = Column(Float, nullable=True)
     total_return_pct = Column(Float, nullable=True)
     max_drawdown_pct = Column(Float, nullable=True)
-    ran_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    ran_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
     user = relationship("User", back_populates="backtest_results")
     strategy = relationship("Strategy", back_populates="backtest_results")
@@ -155,3 +155,12 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_db_session():
+    """
+    Crea y retorna una nueva sesión SQLAlchemy.
+    El caller es responsable de cerrarla (usar en bloque try/finally).
+    Centraliza la creación de sesiones para servicios que no pueden importar de api/.
+    """
+    return SessionLocal()

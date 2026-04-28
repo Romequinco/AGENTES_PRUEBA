@@ -7,8 +7,8 @@ from flask import jsonify
 
 
 def get_db():
-    from db.models import SessionLocal
-    return SessionLocal()
+    from db.models import get_db_session
+    return get_db_session()
 
 
 def require_premium(user_id: int):

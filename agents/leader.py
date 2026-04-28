@@ -34,28 +34,26 @@ class LeaderAgent:
         self.output_dir = config.get("output_dir", "output")
         self.madrid = MADRID_TZ
         self.system_prompt = self._load_instructions()
-        if ext_logger:
-            global logger
-            logger = ext_logger.getChild("leader")
+        self.logger = ext_logger.getChild("leader") if ext_logger else logger
 
     def _load_instructions(self) -> str:
         return load_instructions("leader_instructions.md")
 
     def run(self, date: str | None = None) -> dict:
         date = date or datetime.now(self.madrid).strftime("%Y-%m-%d")
-        logger.info(f"=== Líder iniciando pipeline para {date} ===")
+        self.logger.info(f"=== Líder iniciando pipeline para {date} ===")
         start = time.time()
         errors = []
 
         # Carga de componentes IBEX 35 — primer paso obligatorio antes de todo
-        logger.info("[ 0/3 ] Cargando composición actual del IBEX 35...")
+        self.logger.info("[ 0/3 ] Cargando composición actual del IBEX 35...")
         cache_dir = os.path.dirname(self.config.get("data_raw_dir", "data/raw")) or "data"
         try:
             components = get_ibex35_components(
                 cache_dir=cache_dir,
                 max_cache_age_days=int(self.config.get("ibex_cache_days", 7)),
             )
-            logger.info(
+            self.logger.info(
                 f"[ 0/3 ] IBEX 35: {len(components['tickers'])} componentes "
                 f"(fuente: {components.get('source')}, fecha: {components.get('last_updated')})"
             )
@@ -72,13 +70,13 @@ class LeaderAgent:
                 return result
             except PipelineError as e:
                 errors.append(str(e))
-                logger.error(f"Pipeline intento {attempt + 1} fallido: {e}")
+                self.logger.error(f"Pipeline intento {attempt + 1} fallido: {e}")
                 if attempt < pipeline_retries - 1:
-                    logger.info(f"Reintentando en {self.retry_delay}s...")
+                    self.logger.info(f"Reintentando en {self.retry_delay}s...")
                     time.sleep(self.retry_delay)
             except Exception as e:
                 errors.append(str(e))
-                logger.error(f"Error inesperado en pipeline: {e}")
+                self.logger.error(f"Error inesperado en pipeline: {e}")
                 break
 
         result = {"status": "failed", "pdf_path": None, "date": date, "errors": errors}
@@ -88,36 +86,36 @@ class LeaderAgent:
     def execute_pipeline(self, date: str, components: dict, skip_researcher: bool = False) -> dict:
         # Fase 1: Researcher
         if not skip_researcher:
-            logger.info("[ 1/3 ] Ejecutando Researcher...")
+            self.logger.info("[ 1/3 ] Ejecutando Researcher...")
             researcher = ResearcherAgent(date, self.config, components=components)
             r_result = researcher.run()
             if r_result["status"] == "error":
                 raise PipelineError(f"Researcher falló: {r_result['errors']}")
-            logger.info(f"[ 1/3 ] Researcher completado ({r_result['status']})")
+            self.logger.info(f"[ 1/3 ] Researcher completado ({r_result['status']})")
         else:
-            logger.info("[ 1/3 ] Researcher omitido (datos ya existentes)")
+            self.logger.info("[ 1/3 ] Researcher omitido (datos ya existentes)")
 
         # Fase 2: Analyst
-        logger.info("[ 2/3 ] Ejecutando Analyst...")
+        self.logger.info("[ 2/3 ] Ejecutando Analyst...")
         analyst = AnalystAgent(date, self.config)
         a_result = analyst.run()
         if a_result["status"] == "error":
             raise PipelineError(f"Analyst falló: {a_result['errors']}")
-        logger.info(f"[ 2/3 ] Analyst completado")
+        self.logger.info(f"[ 2/3 ] Analyst completado")
 
         # Fase 3: Writer
-        logger.info("[ 3/3 ] Ejecutando Writer...")
+        self.logger.info("[ 3/3 ] Ejecutando Writer...")
         writer = WriterAgent(date, self.config)
         w_result = writer.run()
         if w_result["status"] == "error":
             raise PipelineError(f"Writer falló: {w_result['errors']}")
         pdf_path = w_result["pdf_file"]
-        logger.info(f"[ 3/3 ] Writer completado: {pdf_path}")
+        self.logger.info(f"[ 3/3 ] Writer completado: {pdf_path}")
 
         # Validación
-        logger.info("[ QA ] Validando output...")
+        self.logger.info("[ QA ] Validando output...")
         validation = self.validate_output(date, pdf_path)
-        logger.info(f"[ QA ] Score: {validation['score']}/100 — {validation['recommendation'].upper()}")
+        self.logger.info(f"[ QA ] Score: {validation['score']}/100 — {validation['recommendation'].upper()}")
 
         if validation["recommendation"] == "abort":
             raise PipelineError(f"Validación abortó el pipeline. Issues: {validation['issues']}")
@@ -173,7 +171,7 @@ class LeaderAgent:
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay)
 
-        logger.warning("Líder: validación LLM fallida, usando validación básica")
+        self.logger.warning("Líder: validación LLM fallida, usando validación básica")
         return self._basic_validation(analysis, pdf_size_kb)
 
     def _basic_validation(self, analysis: dict, pdf_size_kb: float) -> dict:
@@ -270,14 +268,14 @@ class LeaderAgent:
             with open(analysis_path, "w", encoding="utf-8") as f:
                 json.dump(analysis, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.warning(f"No se pudo actualizar validation_status: {e}")
+            self.logger.warning(f"No se pudo actualizar validation_status: {e}")
 
     def log_run_summary(self, result: dict, elapsed: float = 0):
         status = result.get("status", "unknown")
         pdf = result.get("pdf_path", "—")
         errors = result.get("errors", [])
         validation = result.get("validation", {})
-        logger.info(
+        self.logger.info(
             f"=== Resumen del pipeline ===\n"
             f"  Estado:    {status.upper()}\n"
             f"  Fecha:     {result.get('date', '—')}\n"
@@ -308,6 +306,6 @@ class LeaderAgent:
             out_path = os.path.join(self.output_dir, "last_run.json")
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
-            logger.info(f"Estado guardado en {out_path}")
+            self.logger.info(f"Estado guardado en {out_path}")
         except Exception as e:
-            logger.warning(f"No se pudo guardar last_run.json: {e}")
+            self.logger.warning(f"No se pudo guardar last_run.json: {e}")

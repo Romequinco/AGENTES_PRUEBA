@@ -1,6 +1,6 @@
 # IBEX 35 — Informe Diario Automático + Newsletter
 
-Sistema multi-agente que genera informes del mercado español de forma automática cada día hábil a las 17:35 (Madrid), usando la API de Claude. Incluye una capa de newsletter por email con API REST.
+Sistema multi-agente que genera informes del mercado español de forma automática cada día hábil a las 17:35 (Madrid), usando la API de Claude. Incluye newsletter por email, API REST con autenticación JWT, tiers Premium y PRO, y despliegue en Railway.
 
 ---
 
@@ -16,7 +16,7 @@ flowchart TD
     W["Writer Agent\nSonnet — único con acceso a output/"]
     OUT["Informe 7 páginas\noutput/"]
     NL["_run_newsletter()\nno bloquea el pipeline"]
-    DB["PostgreSQL\nusuarios y suscriptores"]
+    DB["PostgreSQL\nusuarios, alertas, backtests, portfolios"]
     SG["SendGrid\nemail batch"]
 
     GH --> M --> L
@@ -45,30 +45,55 @@ El Researcher y el Analyst se lanzan **en paralelo**. El Writer arranca solo cua
 
 ```
 ├── agents/
-│   ├── leader.py        # Orquestador y validador final
-│   ├── researcher.py    # Recopilación de datos de mercado (yfinance + RSS)
-│   ├── analyst.py       # Análisis técnico y fundamental con LLM
-│   ├── writer.py        # Generación del informe con gráficos + generate_newsletter_data()
-│   ├── ibex_data.py     # Composición y caché del IBEX 35
-│   └── utils.py         # Helpers compartidos (logging, limpieza de runs)
+│   ├── leader.py           # Orquestador y validador final
+│   ├── researcher.py       # Recopilación de datos (yfinance + RSS)
+│   ├── analyst.py          # Análisis técnico y fundamental
+│   ├── writer.py           # Generación del informe + generate_newsletter_data()
+│   ├── ibex_data.py        # Composición y caché del IBEX 35
+│   └── utils.py            # Helpers compartidos (logging, limpieza de runs)
 ├── db/
-│   └── models.py        # Modelos SQLAlchemy: User, NewsletterSubscriber (PostgreSQL)
+│   └── models.py           # Modelos SQLAlchemy + get_db_session() (PostgreSQL)
 ├── services/
 │   ├── email_formatter.py  # HTML mobile-friendly del newsletter
-│   └── email_sender.py     # Envío batch via SendGrid Personalizations API
+│   ├── email_sender.py     # Envío batch via SendGrid Personalizations API
+│   ├── technical_analyzer.py  # SMA20, SMA50, RSI14, MACD vía yfinance
+│   ├── alerts_engine.py    # Worker APScheduler: alertas 17:35 + reportes PRO lunes
+│   ├── monitoring.py       # send_error_alert() + @monitor_errors (rate limit 1h)
+│   ├── backtester.py       # Backtest determinista, estrategias JSON, límite 3/mes
+│   ├── fundamental_analyzer.py  # fundamental_data() + data_quality_score()
+│   ├── portfolio_tracker.py     # add_position, close_position, portfolio_summary
+│   └── reporter.py         # generate_weekly_report(user_id) → PDF
 ├── api/
-│   └── flask_app.py     # POST /register, GET /api/v1/newsletter/latest, GET /health
+│   ├── flask_app.py        # App factory — registra 6 blueprints, JWT fail-fast
+│   ├── helpers.py          # get_db(), require_premium(), require_pro()
+│   ├── auth.py             # Blueprint /auth/*  (JWT)
+│   ├── newsletter.py       # Blueprint /register, /api/v1/newsletter/latest, /health
+│   ├── premium.py          # Blueprint alertas + análisis técnico (tier premium/pro)
+│   ├── pro.py              # Blueprint estrategias, backtests, portfolios, reporte (PRO)
+│   ├── stripe.py           # Blueprint /stripe/create-checkout, /stripe/webhook
+│   └── admin.py            # Blueprint /admin/metrics (X-Admin-Key)
+├── frontend/
+│   ├── dashboard.html      # SPA vanilla: auth, indicadores, alertas, upgrade
+│   └── admin_dashboard.html  # KPIs en tiempo real — actualización cada 5 min
 ├── .claude/
-│   ├── CLAUDE.md        # Contexto y reglas para Claude Code
-│   ├── architecture.md  # Diagrama detallado del pipeline
-│   ├── decisions.md     # Log de decisiones de diseño
-│   └── estado_actual.md # Estado operativo actual del sistema
+│   ├── CLAUDE.md           # Contexto y reglas para Claude Code
+│   ├── architecture.md     # Diagrama detallado del pipeline
+│   ├── decisions.md        # Log de decisiones de diseño
+│   ├── estado_actual.md    # Estado operativo actual del sistema
+│   └── skills/             # System prompts de cada agente
+├── tests/
+│   ├── conftest.py
+│   ├── test_smoke.py       # 24 smoke tests
+│   └── test_phase3.py      # 24 tests Fase 3 (backtester, fundamental, portfolio)
 ├── data/
-│   ├── raw/             # JSONs de mercado (output del Researcher)
-│   └── analysis/        # JSONs de análisis + newsletter_YYYY-MM-DD.json
-├── output/              # Informes generados, un archivo por día
-├── logs/                # Logs de ejecución: run_YYYY-MM-DD.log
-└── main.py              # Punto de entrada
+│   ├── raw/                # JSONs de mercado (output del Researcher)
+│   └── analysis/           # JSONs de análisis + newsletter_YYYY-MM-DD.json
+├── output/                 # Informes PDF diarios + reportes semanales PRO
+├── logs/                   # Logs de ejecución: run_YYYY-MM-DD.log
+├── railway.toml            # Configuración Railway (2 servicios: web + worker)
+├── Procfile                # Fallback Heroku-style
+├── DEPLOY.md               # Guía de deploy en Railway (paso a paso)
+└── main.py                 # Punto de entrada
 ```
 
 ---
@@ -110,6 +135,9 @@ $env:FORCE_RUN="true"; python main.py  # PowerShell
 
 # Arrancar la API Flask
 python api/flask_app.py
+
+# Arrancar el worker de alertas
+python services/alerts_engine.py
 ```
 
 ---
@@ -126,24 +154,53 @@ El informe generado se sube como artefacto del workflow.
 
 ---
 
+## Deploy en Railway
+
+Ver `DEPLOY.md` para la guía completa. Resumen:
+
+- 2 servicios: `web` (gunicorn) + `worker` (alerts_engine)
+- PostgreSQL como plugin — `DATABASE_URL` se inyecta automáticamente
+- `/health` como healthcheck de Railway: `{"status","db","sendgrid","stripe","timestamp"}`
+
+---
+
 ## Variables de entorno
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Sí | Clave API de Anthropic |
-| `DATABASE_URL` | Sí (newsletter) | URL PostgreSQL. Sin ella el newsletter se omite silenciosamente |
-| `SENDGRID_API_KEY` | Sí (newsletter) | Clave API de SendGrid |
-| `SENDGRID_FROM_EMAIL` | Sí (newsletter) | Email remitente verificado en SendGrid |
-| `MODEL_LEADER` | No | Modelo del orquestador (default: haiku) |
-| `MODEL_ANALYST` | No | Modelo del analista (default: haiku) |
-| `MODEL_WRITER` | No | Modelo del redactor (default: haiku) |
+| `DATABASE_URL` | Sí | URL PostgreSQL (Railway la inyecta automáticamente) |
+| `SENDGRID_API_KEY` | Sí | Clave API de SendGrid |
+| `SENDGRID_FROM_EMAIL` | Sí | Email remitente verificado en SendGrid |
+| `JWT_SECRET_KEY` | Sí | Mínimo 32 chars — la app no arranca sin ella |
+| `STRIPE_SECRET_KEY` | Sí | Clave Stripe (dashboard → API Keys) |
+| `STRIPE_WEBHOOK_SECRET` | Sí | Signing secret del webhook Stripe |
+| `STRIPE_PREMIUM_PRICE_ID` | Sí | Price ID del plan Premium |
+| `STRIPE_PRO_PRICE_ID` | Sí | Price ID del plan PRO |
+| `ADMIN_API_KEY` | Sí | Header `X-Admin-Key` para `/admin/metrics` |
+| `ADMIN_EMAIL` | Sí | Email que recibe alertas de errores críticos |
+| `MODEL_LEADER` | No | Modelo del orquestador (default: claude-opus-4-7) |
+| `MODEL_ANALYST` | No | Modelo del analista (default: claude-sonnet-4-6) |
+| `MODEL_WRITER` | No | Modelo del redactor (default: claude-sonnet-4-6) |
 | `FORCE_RUN` | No | `true` para ignorar validación de horario |
 | `MAX_RETRIES` | No | Reintentos por agente (default: 3) |
 | `IBEX_CACHE_DAYS` | No | Días de validez de la caché del IBEX (default: 7) |
 | `FINNHUB_API_KEY` | No | Para noticias adicionales |
+| `ALERTS_TIMEZONE` | No | Zona horaria del motor de alertas (default: Europe/Madrid) |
+| `ALERTS_HOUR` / `ALERTS_MINUTE` | No | Hora de evaluación (default: 17:35) |
+| `PORT` | No | Railway lo asigna automáticamente |
+| `FLASK_DEBUG` | No | `true` solo en desarrollo local |
+
+---
+
+## Tests
+
+```bash
+python -m pytest tests/ -v   # 48 tests — smoke + fase 3
+```
 
 ---
 
 ## Stack
 
-`Python 3.11` · `anthropic` · `yfinance` · `pandas` · `matplotlib` · `reportlab` · `feedparser` · `SQLAlchemy` · `psycopg2` · `Flask` · `sendgrid`
+`Python 3.11+` · `anthropic` · `yfinance` · `pandas` · `matplotlib` · `reportlab` · `feedparser` · `SQLAlchemy` · `psycopg2` · `Flask` · `flask-jwt-extended` · `bcrypt` · `stripe` · `APScheduler` · `gunicorn` · `sendgrid` · `python-dotenv`

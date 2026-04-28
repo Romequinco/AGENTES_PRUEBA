@@ -1,16 +1,16 @@
 # Estado actual del sistema
 
-> Última actualización: 2026-04-28 — Deploy en producción completado
+> Última actualización: 2026-04-28 — Auditoría de seguridad y rendimiento completada
 
 ## Estado general: EN PRODUCCIÓN
 
-El sistema completo está desplegado y operativo en Railway. Pipeline diario, newsletter, tiers Premium y PRO, y toda la infraestructura de producción verificados en producción real.
+El sistema completo está desplegado y operativo en Railway. Pipeline diario, newsletter, tiers Premium y PRO, y toda la infraestructura de producción verificados. Auditoría de código completada con 8 correcciones aplicadas.
 
 **URL de producción:** `https://web-production-6a82d.up.railway.app`
 
 ---
 
-## Qué funciona (4 fases)
+## Qué funciona (4 fases + auditoría)
 
 ### Pipeline principal (siempre activo)
 - Recopilador → Analista → Redactor → Validación por el Orquestador
@@ -48,6 +48,23 @@ El sistema completo está desplegado y operativo en Railway. Pipeline diario, ne
 - `frontend/admin_dashboard.html`: KPIs en tiempo real
 - `DEPLOY.md`: guía paso a paso para Railway
 
+### Auditoría de seguridad y rendimiento (2026-04-28)
+
+8 problemas identificados y corregidos (problema 5 fue falsa alarma):
+
+| # | Archivo | Corrección |
+|---|---|---|
+| 1 | `api/flask_app.py` | `JWT_SECRET_KEY` fail-fast: la app no arranca si no está definida o < 32 chars |
+| 2 | `api/flask_app.py` | `JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)` — tokens ya no son eternos |
+| 3 | `api/flask_app.py` | Dead code eliminado: guard de `DATABASE_URL` en `__main__` era inalcanzable |
+| 4 | `services/alerts_engine.py` | N+1 query → `joinedload(Alert.user)` en query de alertas activas |
+| 6 | `agents/leader.py` | `global logger` mutado → `self.logger` como atributo de instancia |
+| 7 | `api/helpers.py` + `services/portfolio_tracker.py` | `get_db()` duplicado → centralizado en `db/models.get_db_session()` |
+| 8 | `main.py` | Excepción silenciada en `get_last_market_date()` → `logger.warning(...)` |
+| 9 | `db/models.py` | Índices añadidos: `Alert.active` + `BacktestResult.ran_at` |
+
+Índices creados en Railway PostgreSQL con `CREATE INDEX CONCURRENTLY IF NOT EXISTS`.
+
 ---
 
 ## Arquitectura de servicios
@@ -84,3 +101,4 @@ Ver `DEPLOY.md` para la lista completa agrupada por servicio.
 - `DATABASE_URL` debe ser PostgreSQL — Railway tiene filesystem efímero
 - `SENDGRID_FROM_EMAIL` debe estar verificado en SendGrid antes del primer envío
 - `STRIPE_WEBHOOK_SECRET` es fijo en producción (configurado en dashboard Stripe)
+- Tokens JWT expiran en 30 días — el frontend no implementa refresh automático (ver `DEPLOY.md`)

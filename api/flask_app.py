@@ -16,6 +16,7 @@ Para arrancar:
 
 import os
 import sys
+from datetime import timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -37,8 +38,14 @@ def create_app() -> Flask:
     """Crea y configura la aplicación Flask con todos sus blueprints."""
     app = Flask(__name__, static_folder=None)
 
-    app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "dev-insecure-change-me")
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+    _jwt_secret = os.environ.get("JWT_SECRET_KEY")
+    if not _jwt_secret or len(_jwt_secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET_KEY no está definida o tiene menos de 32 chars. "
+            "Genera una con: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    app.config["JWT_SECRET_KEY"] = _jwt_secret
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=30)
 
     JWTManager(app)
 
@@ -56,13 +63,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    if not os.environ.get("DATABASE_URL"):
-        print(
-            "ERROR: DATABASE_URL no está definido. "
-            "Configura una URL de PostgreSQL antes de arrancar la API.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "").lower() == "true")

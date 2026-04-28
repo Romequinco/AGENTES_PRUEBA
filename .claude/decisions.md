@@ -218,6 +218,66 @@ Registro de decisiones de diseño no obvias. El código muestra el *qué*; este 
 
 ---
 
+## 023 — JWT_SECRET_KEY fail-fast en arranque (no fallback inseguro)
+
+**Decisión:** `create_app()` lanza `RuntimeError` si `JWT_SECRET_KEY` no está definida o tiene menos de 32 caracteres. La app no arranca.
+
+**Por qué:** El código anterior tenía `os.environ.get("JWT_SECRET_KEY", "dev-insecure-change-me")`. Si la variable no estaba en producción, la app arrancaba con una clave pública y predecible — cualquiera podía forjar tokens JWT válidos. Un fallo ruidoso en arranque es infinitamente mejor que una vulnerabilidad silenciosa en producción.
+
+**Cómo aplicar:** Generar clave con `python -c "import secrets; print(secrets.token_hex(32))"` y configurarla en Railway antes del deploy. El mensaje de error incluye el comando de generación.
+
+---
+
+## 024 — JWT_ACCESS_TOKEN_EXPIRES = 30 días (no infinito)
+
+**Decisión:** Los tokens JWT expiran a los 30 días (`timedelta(days=30)`). El código anterior usaba `False` (sin expiración).
+
+**Por qué:** Un token sin expiración es válido para siempre — incluso si el usuario es eliminado, su tier cambia, o el token es robado. 30 días es un equilibrio razonable entre seguridad (ventana de exposición limitada) y UX (no fuerza login diario).
+
+**Cómo aplicar:** El frontend `dashboard.html` no implementa refresh automático — si un usuario recibe 401 después de 30 días, debe hacer login de nuevo. Si se necesita refresh transparente, implementar con un endpoint `/auth/refresh` y `flask_jwt_extended.create_refresh_token`.
+
+---
+
+## 025 — get_db_session() centralizado en db/models.py
+
+**Decisión:** La creación de sesiones SQLAlchemy está centralizada en `db/models.get_db_session()`. Los servicios que no pueden importar de `api/` (como `portfolio_tracker.py`) usan esta función en lugar de construir `SessionLocal()` directamente.
+
+**Por qué:** `api/helpers.py:get_db()` y `services/portfolio_tracker.py:_get_db()` tenían la misma lógica duplicada. `db/models.py` ya tiene `SessionLocal` — es la capa correcta para exponer este helper sin crear dependencias circulares (services → api sería inversión de dependencias).
+
+**Cómo aplicar:** Nuevos servicios que necesiten sesión DB: `from db.models import get_db_session`. El import debe ser **lazy** (dentro de la función), no a nivel de módulo, porque `db/models.py` lanza `EnvironmentError` al importarse si `DATABASE_URL` no está definida.
+
+---
+
+## 026 — joinedload para evitar N+1 en evaluación de alertas
+
+**Decisión:** `services/alerts_engine._evaluate_alerts()` usa `joinedload(Alert.user)` en la query de alertas activas. La query de `User` por cada alerta disparada fue eliminada.
+
+**Por qué:** Con N alertas activas y M disparadas, el patrón original hacía 1 + M queries. Con `joinedload`, es siempre 1 query (JOIN). El índice en `Alert.active` (decisión 027) hace que esa query inicial sea eficiente incluso con tablas grandes.
+
+**Cómo aplicar:** Requiere que `Alert.user` esté definida como `relationship` en `db/models.py` (existe desde Fase 2). Si se añaden relaciones nuevas a `Alert`, evaluar si también conviene precargarlas con `joinedload`.
+
+---
+
+## 027 — Índices en Alert.active y BacktestResult.ran_at
+
+**Decisión:** Se añadieron `index=True` a `Alert.active` (usada en la query masiva diaria del motor de alertas) y `BacktestResult.ran_at` (usada en el límite de 3 backtests/mes y en el reporte PRO).
+
+**Por qué:** Sin índice, la query `WHERE active = TRUE` sobre la tabla `alerts` hace table scan completo en cada evaluación diaria. `ran_at` se filtra por rango de fechas en el conteo mensual de backtests — sin índice, ese `COUNT` también hace scan.
+
+**Cómo aplicar:** Los índices se crean en DB con `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (no bloquea en producción). SQLAlchemy no aplica cambios de schema automáticamente en tablas existentes — `index=True` en el modelo solo afecta a tablas creadas nuevas. Para DBs existentes, ejecutar el SQL manualmente en Railway.
+
+---
+
+## 028 — self.logger en LeaderAgent (no mutación de global)
+
+**Decisión:** `LeaderAgent.__init__` asigna `self.logger` como atributo de instancia. El bloque `global logger; logger = ext_logger.getChild(...)` fue eliminado.
+
+**Por qué:** Mutar un logger a nivel de módulo desde `__init__` es un efecto secundario global — la segunda instancia de `LeaderAgent` sobreescribe el logger de la primera, y cualquier función del módulo fuera de la clase se ve afectada. Usar `self.logger` encapsula el comportamiento en la instancia.
+
+**Cómo aplicar:** El logger global del módulo (`logger = logging.getLogger("bolsa.leader")`) se conserva como fallback cuando no se pasa `ext_logger`. Si se añaden métodos nuevos a `LeaderAgent`, usar `self.logger`, no `logger`.
+
+---
+
 ## 009 — SendGrid Personalizations API (batch, no loop)
 
 **Decisión:** `send_bulk_newsletter()` construye un único payload con todas las `personalizations` y hace un solo request HTTP, no un loop de `send_per_user`.

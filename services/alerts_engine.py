@@ -45,6 +45,7 @@ def _check_env() -> None:
 def _evaluate_alerts() -> None:
     """Evalúa todas las alertas activas y notifica si se cumplen las condiciones."""
     from db.models import SessionLocal, Alert, User
+    from sqlalchemy.orm import joinedload
     from services.technical_analyzer import analyze
     from services.email_sender import send_bulk_newsletter
     from services.email_formatter import format_newsletter_html
@@ -54,6 +55,7 @@ def _evaluate_alerts() -> None:
     try:
         alerts = (
             db.query(Alert)
+            .options(joinedload(Alert.user))
             .filter(Alert.active == True)  # noqa: E712
             .all()
         )
@@ -88,7 +90,7 @@ def _evaluate_alerts() -> None:
             if not condition_met:
                 continue
 
-            user = db.query(User).filter(User.id == alert.user_id).first()
+            user = alert.user
             if not user:
                 continue
 

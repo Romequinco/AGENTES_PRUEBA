@@ -59,7 +59,7 @@ newsletter_YYYY-MM-DD.json    (SendGrid Personalizations)
 | `agents/writer.py` | Redactor | Genera PDF/HTML con gráficos; expone `generate_newsletter_data()` |
 | `agents/ibex_data.py` | Utilidad | Helpers para datos del IBEX 35 |
 | `agents/utils.py` | Utilidad | Logging, formato, limpieza de runs previos |
-| `db/models.py` | Base de datos | SQLAlchemy: User, NewsletterSubscriber, Subscription, Alert, Strategy, BacktestResult, Portfolio, PortfolioPosition |
+| `db/models.py` | Base de datos | SQLAlchemy: User, NewsletterSubscriber, Subscription, Alert, Strategy, BacktestResult, Portfolio, PortfolioPosition. Índices en `Alert.active` e `BacktestResult.ran_at`. Expone `get_db_session()` para servicios. |
 | `services/email_formatter.py` | Email | `format_newsletter_html()` → HTML mobile-friendly |
 | `services/email_sender.py` | Email | `send_bulk_newsletter()` vía SendGrid Personalizations API |
 | `services/technical_analyzer.py` | Análisis técnico | SMA20, SMA50, RSI14, MACD, soporte, resistencia vía yfinance |
@@ -69,14 +69,14 @@ newsletter_YYYY-MM-DD.json    (SendGrid Personalizations)
 | `services/fundamental_analyzer.py` | PRO | `fundamental_data()` + `data_quality_score()` vía yfinance |
 | `services/portfolio_tracker.py` | PRO | `add_position`, `close_position`, `portfolio_summary` con benchmark IBEX |
 | `services/reporter.py` | PRO | `generate_weekly_report(user_id)` → PDF |
-| `api/flask_app.py` | App factory | Crea Flask app, registra 6 blueprints |
+| `api/flask_app.py` | App factory | Crea Flask app, registra 6 blueprints. JWT fail-fast: lanza `RuntimeError` si `JWT_SECRET_KEY` no está o < 32 chars. Tokens expiran en 30 días. |
 | `api/auth.py` | Blueprint | `/auth/register`, `/auth/login` |
 | `api/newsletter.py` | Blueprint | `/register` (legacy), `/api/v1/newsletter/latest`, `/health`, `/dashboard.html` |
 | `api/premium.py` | Blueprint | `/api/v1/alerts`, `/api/v1/technical/<symbol>` (tier premium/pro) |
 | `api/pro.py` | Blueprint | Estrategias, backtests, portfolios, reporte semanal (tier pro) |
 | `api/stripe.py` | Blueprint | `/stripe/create-checkout`, `/stripe/webhook` |
 | `api/admin.py` | Blueprint | `/admin/metrics` (protegido por ADMIN_API_KEY) |
-| `api/helpers.py` | Helpers | `get_db()`, `require_premium()`, `require_pro()` |
+| `api/helpers.py` | Helpers | `get_db()` (wrapper de `db.models.get_db_session`), `require_premium()`, `require_pro()` |
 | `frontend/dashboard.html` | Dashboard | SPA vanilla: auth, indicadores técnicos, alertas, upgrade |
 | `frontend/admin_dashboard.html` | Admin | KPIs en tiempo real — actualización cada 5 min |
 | `.claude/skills/*_instructions.md` | Prompts | System prompts de cada agente del pipeline |

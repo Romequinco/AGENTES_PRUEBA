@@ -91,15 +91,15 @@ Funcionalidades exclusivas para `tier = 'pro'`. No afectan al pipeline principal
   skills/             # Instrucciones de cada agente (*_instructions.md)
   CLAUDE.md           # Este archivo
   architecture.md     # Diagrama del pipeline y módulos
-  decisions.md        # Log de decisiones de diseño
+  decisions.md        # Log de decisiones de diseño (023-028: auditoría 2026-04-28)
   estado_actual.md    # Estado operativo actual
   best_practices.md   # Referencia multi-agente
 agents/               # Módulos Python de cada agente (Recopilador, Analista, Redactor, Orquestador)
-db/                   # Modelos SQLAlchemy (PostgreSQL)
+db/                   # Modelos SQLAlchemy (PostgreSQL) + get_db_session()
 services/             # email_formatter, email_sender, technical_analyzer, alerts_engine,
                       # monitoring, backtester, fundamental_analyzer, portfolio_tracker, reporter
 api/
-  flask_app.py        # App factory — registra 6 blueprints
+  flask_app.py        # App factory — registra 6 blueprints, JWT fail-fast en arranque
   helpers.py          # get_db(), require_premium(), require_pro()
   auth.py             # Blueprint /auth/*
   newsletter.py       # Blueprint /register, /api/v1/newsletter/latest, /health
@@ -124,5 +124,9 @@ DEPLOY.md             # Guía de primer deploy
 - Estrategias de backtesting: siempre JSON, nunca lambdas (no serializables)
 - `@monitor_errors` de `services/monitoring.py`: usar en jobs nuevos de APScheduler — re-lanza la excepción, no la silencia
 - `ADMIN_API_KEY` controla `/admin/metrics`; si no está configurada el endpoint devuelve 503
+- **`JWT_SECRET_KEY`** debe tener ≥ 32 chars — `create_app()` lanza `RuntimeError` si no está definida
+- **Tokens JWT expiran en 30 días** — el frontend no implementa refresh; un 401 requiere nuevo login
+- **Sesiones DB en servicios:** usar `from db.models import get_db_session` con import lazy (dentro de la función, no a nivel de módulo) — `db/models.py` requiere `DATABASE_URL` al importarse
+- **Logger en `LeaderAgent`:** usar `self.logger` dentro de los métodos de la clase, no el `logger` global del módulo
 - Ver `DEPLOY.md` para lista completa de variables de entorno requeridas por servicio
 - Ver `.claude/best_practices.md` para referencia de subagentes, skills y hooks
